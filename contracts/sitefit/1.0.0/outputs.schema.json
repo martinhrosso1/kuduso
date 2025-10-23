@@ -76,7 +76,9 @@
                         "default": 1,
                         "description": "Uniform scale factor"
                       }
-                    }
+                    },
+                    "required": ["uniform"],
+                    "additionalProperties": false
                   },
                   {
                     "type": "object",
@@ -93,7 +95,9 @@
                         "type": "number",
                         "description": "Scale factor along Z"
                       }
-                    }
+                    },
+                    "required": ["x", "y", "z"],
+                    "additionalProperties": false
                   }
                 ],
                 "default": {

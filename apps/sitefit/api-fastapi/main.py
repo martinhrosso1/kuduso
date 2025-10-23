@@ -26,7 +26,7 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # Configuration
-APP_SERVER_URL = "http://localhost:8080/gh/{def}:{ver}/solve"
+APP_SERVER_URL = "http://localhost:8080/gh/{definition}:{version}/solve"
 TIMEOUT_SECONDS = 10.0
 
 # In-memory job storage (Stage 1 only)
@@ -42,7 +42,12 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000"],  # Frontend origin
+    allow_origins=[
+        "http://localhost:3000",
+        "http://localhost:3001", 
+        "http://localhost:3002",
+        "http://localhost:3003"
+    ],  # Frontend origin (supports multiple ports for dev)
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -106,7 +111,7 @@ async def run_job(
     }
 
     # Synchronous call to AppServer (Stage 1 only)
-    url = APP_SERVER_URL.format(def=envelope.definition, ver=envelope.version)
+    url = APP_SERVER_URL.format(definition=envelope.definition, version=envelope.version)
     headers = {"x-correlation-id": cid}
 
     try:

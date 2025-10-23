@@ -7,10 +7,14 @@ import { fileURLToPath } from 'node:url';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const ajv = new Ajv({ allErrors: true });
-addFormats(ajv);
-
 const CONTRACTS_DIR = process.env.CONTRACTS_DIR || path.join(__dirname, '../../../contracts');
+
+// Create a new Ajv instance for each validation to avoid caching issues during development
+function createAjv(): Ajv {
+  const ajv = new Ajv({ allErrors: true });
+  addFormats(ajv);
+  return ajv;
+}
 
 interface ValidationError {
   code: number;
@@ -42,6 +46,7 @@ function loadSchema(def: string, ver: string, type: 'inputs' | 'outputs'): any {
 
 export function validateInputs(def: string, ver: string, body: any): any {
   const schema = loadSchema(def, ver, 'inputs');
+  const ajv = createAjv();
   const validate = ajv.compile(schema);
 
   if (!validate(body)) {
@@ -57,6 +62,7 @@ export function validateInputs(def: string, ver: string, body: any): any {
 
 export function validateOutputs(def: string, ver: string, body: any): any {
   const schema = loadSchema(def, ver, 'outputs');
+  const ajv = createAjv();
   const validate = ajv.compile(schema);
 
   if (!validate(body)) {
