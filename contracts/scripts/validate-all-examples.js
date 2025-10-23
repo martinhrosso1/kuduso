@@ -26,8 +26,12 @@ function findContracts() {
   
   // Find all contracts
   const contracts = [];
+  const skipDirs = ['_templates', 'scripts', 'node_modules', '.git'];
   const definitions = fs.readdirSync(contractsDir, { withFileTypes: true })
-    .filter(dirent => dirent.isDirectory() && !dirent.name.startsWith('_') && !dirent.name.startsWith('.'))
+    .filter(dirent => dirent.isDirectory() && 
+                      !dirent.name.startsWith('_') && 
+                      !dirent.name.startsWith('.') &&
+                      !skipDirs.includes(dirent.name))
     .map(dirent => dirent.name);
   
   for (const definition of definitions) {

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://kuduso/contracts/sitefit/1.0.0/outputs.schema.json",
   "title": "SiteFit Outputs v1.0.0",
   "description": "Output schema for house placement results with transforms, scores, and artifacts",

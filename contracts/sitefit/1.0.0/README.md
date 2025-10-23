@@ -4,6 +4,8 @@
 
 SiteFit is a computational definition for placing a house footprint onto a land parcel under geometric and spatial constraints. It evaluates multiple placement options (rotation and translation) and returns scored solutions with transforms and key performance indicators.
 
+**Schema Version**: JSON Schema Draft 07
+
 ## Inputs Summary
 
 | Parameter | Type | Units | Default | Description |

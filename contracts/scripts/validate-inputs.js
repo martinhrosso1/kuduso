@@ -48,7 +48,7 @@ try {
 }
 
 // Validate
-const ajv = new Ajv({ allErrors: true, strict: true });
+const ajv = new Ajv({ allErrors: true });
 addFormats(ajv);
 
 const validate = ajv.compile(schema);

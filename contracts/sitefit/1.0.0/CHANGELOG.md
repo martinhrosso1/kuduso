@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [1.0.0] - 2025-10-23
 
 ### Added
-- Initial contract definition for SiteFit
+- Initial contract definition for SiteFit (JSON Schema Draft 07)
 - Input schema with support for:
   - Parcel and house geometries (closed polygons)
   - Rotation parameters (min, max, step)

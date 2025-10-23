@@ -1,5 +1,5 @@
 {
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://kuduso/contracts/sitefit/1.0.0/inputs.schema.json",
   "title": "SiteFit Inputs v1.0.0",
   "description": "Input schema for placing a house footprint onto a land parcel under constraints",
