@@ -51,22 +51,24 @@ kuduso/
 └── context/            # AI development context
 ```
 
-## Current Status: Stage 0 Complete ✅
+## Current Status: Stage 1 Complete ✅
 
-**Stage 0 - Bootstrap & Contracts** is complete. All contract definitions, validation tooling, and documentation are in place.
+**Stage 1 - Mocked Compute Loop** is complete. All three services (AppServer, API, Frontend) are running with contract validation and mock results.
 
-See **[STAGE0_COMPLETE.md](./STAGE0_COMPLETE.md)** for full details.
+See **[STAGE1_COMPLETE.md](./STAGE1_COMPLETE.md)** for full details.
 
 ### What's Ready
-- ✅ Contract schemas for sitefit/1.0.0
-- ✅ Validation tooling (Node.js + Python)
-- ✅ CI/CD workflow for contract validation
-- ✅ Example payloads (valid and invalid)
-- ✅ Templates for new contracts
-- ✅ Documentation
+- ✅ **Stage 0**: Contract schemas and validation
+- ✅ **Stage 1**: Full mock compute loop
+  - AppServer (Node.js) with contract validation
+  - API (FastAPI) with job endpoints
+  - Frontend (Next.js) with polling UI
+  - E2E tests passing
+  - Correlation ID tracking
+  - Development tooling (Makefile)
 
-### Next: Stage 1
-**Mocked Compute Loop (local)** - End-to-end JSON roundtrip without Rhino
+### Next: Stage 2
+**Messaging & Persistence** - Replace sync calls with Service Bus + Database
 
 ## Getting Started
 
@@ -79,15 +81,25 @@ See **[STAGE0_COMPLETE.md](./STAGE0_COMPLETE.md)** for full details.
 ### Quick Start
 
 ```bash
-# Install dependencies
+# Install all dependencies
 make install
 
 # Validate contracts
 make contracts-validate
 
-# Start local development (coming in Stage 1)
+# Start all services (requires tmux)
 make dev
+
+# Or start services individually:
+make dev-appserver  # Port 8080
+make dev-api        # Port 8081
+make dev-frontend   # Port 3000
+
+# Run tests
+make test
 ```
+
+Then open http://localhost:3000 to use the app.
 
 ## Documentation
 
@@ -96,6 +108,7 @@ make dev
 - **Implementation Roadmap**: [context/dev_roadmap_sitefit/roadmap.md](./context/dev_roadmap_sitefit/roadmap.md)
 - **Contracts Guide**: [contracts/README.md](./contracts/README.md)
 - **Stage 0 Completion**: [STAGE0_COMPLETE.md](./STAGE0_COMPLETE.md)
+- **Stage 1 Completion**: [STAGE1_COMPLETE.md](./STAGE1_COMPLETE.md)
 
 ## Development Workflow
 
@@ -118,8 +131,14 @@ All new apps start with contract definitions:
 ### SiteFit (MVP)
 Places a house footprint onto a land parcel under geometric and spatial constraints.
 
-**Status**: Stage 0 complete (contracts defined)  
-**Contract**: [contracts/sitefit/1.0.0/](./contracts/sitefit/1.0.0/)
+**Status**: Stage 1 complete (mock compute loop working)  
+**Contract**: [contracts/sitefit/1.0.0/](./contracts/sitefit/1.0.0/)  
+**Services**:
+- AppServer: `shared/appserver-node/` (port 8080)
+- API: `apps/sitefit/api-fastapi/` (port 8081)
+- Frontend: `apps/sitefit/frontend/` (port 3000)
+
+**Try it**: `make dev` then open http://localhost:3000
 
 ## Contributing
 
