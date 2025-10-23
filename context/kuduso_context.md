@@ -31,24 +31,48 @@ Sitefit is a web app that places a house footprint onto a land parcel under cons
 ```
 kuduso/
   contracts/
-    app-a/1.0.0/
+    sitefit/1.0.0/
       inputs.schema.json
       outputs.schema.json
       bindings.json
       manifest.json
       plugins.json
-	app-b/1.5.0/
+      README.md
+      examples/
+        valid/minimal.json
+        valid/typical.json
+        invalid/missing-required.json
   apps/
-    app-a/1
+    sitefit/
       frontend/           # Next.js (Vercel)
       api-fastapi/        # external API (enqueue/status/result) + SB producer
       worker-fastapi/     # internal worker (SB consumer) + lock renewal
-    app-b/
   shared/
 	  appserver-node/     # internal-only (schemas, GH routing, glTF/GeoJSON packaging)
   infra/
-    azure/              # Bicep/Terraform for ACA env, NAT, VMSS (Rhino), Blob, Key Vault, Log Analytics
-    supabase/           # Supabase Terraform definitions
+    modules/                 # reusable building blocks (pure HCL)
+      shared-core/           # RG, ACR, Log Analytics, Key Vault, Service Bus NS, Storage, ACA env
+      shared-appserver/      # ACA app: appserver-node (internal-only)
+      app-stack/             # per-app: API + Worker + SB queue + KEDA scaling
+      rhino-vm/              # phase-1 Rhino VM (public IP + NSG)
+      rhino-vmss-ilb/        # phase-2 Rhino VMSS behind Internal Load Balancer
+      network/               # (optional) VNet, subnets, NAT, Private Endpoints
+      dns/                   # (optional) zone/records for API hostnames
+    live/                    # env-specific orchestration with Terragrunt
+      dev/
+        shared/              # the *platform* for dev
+          core/              # shared-core module
+          appserver/         # shared-appserver module
+          rhino/             # rhino-vm (or rhino-vmss-ilb later)
+          network/           # (optional at first)
+        apps/                # per-app stacks (repeat per app)
+          sitefit/           # app-stack module for sitefit
+            terragrunt.hcl
+          anotherapp/
+            terragrunt.hcl
+        terragrunt.hcl       # env root (remote state, providers, common tags)
+      prod/
+        ... same structure ...
   packages/
     ts-sdk/             # optional shared TypeScript client (generated from OpenAPI + JSON Schemas)
     py-sdk/             # optional Python client/types shared by api/worker
@@ -57,6 +81,8 @@ kuduso/
     api/                # pytest/httpx or Playwright hitting local/dev stack
     ui/                 # Playwright journeys (run → poll → show result)
   .github/workflows/    # or ADO pipelines
+  context/              # AI development context files
+  Makefile   # or Taskfile.yml
 ```
 
 ---
