@@ -159,7 +159,6 @@ contracts/
       plugins.json
       README.md            # optional: human docs/examples
       examples/            # optional: valid/invalid sample payloads
-      tests/               # optional: contract-level tests/fixtures
 ```
 
 **Files (what they mean, generically)**
