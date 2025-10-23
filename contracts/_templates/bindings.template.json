@@ -1,0 +1,19 @@
+{
+  "engine": "grasshopper",
+  "definition": "{DEFINITION_NAME}.ghx",
+  "description": "Maps JSON inputs to Grasshopper parameters and back",
+  "inputs": [
+    {
+      "jsonpath": "$.{INPUT_FIELD}",
+      "gh_param": "{GH_PARAM_NAME}",
+      "description": "{PARAMETER_DESCRIPTION}"
+    }
+  ],
+  "outputs": [
+    {
+      "gh_param": "{GH_OUTPUT_PARAM}",
+      "output_path": "$.results[*].{OUTPUT_FIELD}",
+      "description": "{OUTPUT_DESCRIPTION}"
+    }
+  ]
+}

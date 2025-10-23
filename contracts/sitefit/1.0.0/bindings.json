@@ -1,0 +1,49 @@
+{
+  "engine": "grasshopper",
+  "definition": "sitefit.ghx",
+  "description": "Maps JSON inputs to Grasshopper parameters and back",
+  "inputs": [
+    {
+      "jsonpath": "$.parcel.coordinates",
+      "gh_param": "parcel_polygon",
+      "description": "Parcel boundary as closed polygon"
+    },
+    {
+      "jsonpath": "$.house.coordinates",
+      "gh_param": "house_polygon",
+      "description": "House footprint as closed polygon"
+    },
+    {
+      "jsonpath": "$.rotation",
+      "gh_param": "rotation_spec",
+      "description": "Rotation range specification (min, max, step)"
+    },
+    {
+      "jsonpath": "$.grid_step",
+      "gh_param": "grid_step",
+      "description": "Grid spacing for placement sampling"
+    },
+    {
+      "jsonpath": "$.seed",
+      "gh_param": "seed",
+      "description": "Random seed for deterministic behavior"
+    }
+  ],
+  "outputs": [
+    {
+      "gh_param": "placed_transforms",
+      "output_path": "$.results[*].transform",
+      "description": "Array of placement transforms"
+    },
+    {
+      "gh_param": "placement_scores",
+      "output_path": "$.results[*].score",
+      "description": "Quality scores for each placement"
+    },
+    {
+      "gh_param": "kpis",
+      "output_path": "$.results[*].metrics",
+      "description": "Key performance indicators per placement"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "timeout_sec": 240,
+  "description": "Operational guardrails enforced by AppServer before calling compute engine",
+  "limits": {
+    "max_vertices": 10000,
+    "max_samples": 10000,
+    "max_results": 5,
+    "description": "Hard caps to prevent resource exhaustion"
+  },
+  "concurrency": {
+    "class": "batch",
+    "weight": 1,
+    "description": "Concurrency class: 'preview' for interactive, 'batch' for authoritative runs"
+  },
+  "units": {
+    "length": "m",
+    "angle": "deg",
+    "crs_required": true,
+    "description": "Expected units and coordinate system requirements"
+  },
+  "determinism": {
+    "seed_required": true,
+    "description": "Ensures reproducible results by requiring a random seed"
+  },
+  "validation": {
+    "strict_schema": true,
+    "reject_additional_properties": true,
+    "description": "Schema validation policy"
+  }
+}

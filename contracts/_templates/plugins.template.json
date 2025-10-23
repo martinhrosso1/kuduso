@@ -1,0 +1,21 @@
+{
+  "description": "Required runtime inventory for reproducible compute execution",
+  "engine": {
+    "name": "rhino.compute",
+    "version": "8.7.x",
+    "description": "Rhino.Compute server version requirement"
+  },
+  "plugins": [
+    {
+      "name": "{PLUGIN_NAME}",
+      "version": "{PLUGIN_VERSION}",
+      "required": true,
+      "description": "{PLUGIN_DESCRIPTION}"
+    }
+  ],
+  "verification": {
+    "strict_version_match": false,
+    "allow_minor_updates": true,
+    "description": "Plugin version matching policy"
+  }
+}

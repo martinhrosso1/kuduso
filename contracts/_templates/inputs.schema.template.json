@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kuduso/contracts/{DEFINITION_NAME}/{VERSION}/inputs.schema.json",
+  "title": "{DEFINITION_TITLE} Inputs v{VERSION}",
+  "description": "Input schema for {DEFINITION_DESCRIPTION}",
+  "type": "object",
+  "required": ["crs"],
+  "properties": {
+    "crs": {
+      "type": "string",
+      "pattern": "^EPSG:\\d+$",
+      "description": "Coordinate reference system (e.g., EPSG:5514, EPSG:3857)"
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,216 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kuduso/contracts/sitefit/1.0.0/outputs.schema.json",
+  "title": "SiteFit Outputs v1.0.0",
+  "description": "Output schema for house placement results with transforms, scores, and artifacts",
+  "type": "object",
+  "required": ["results"],
+  "properties": {
+    "results": {
+      "type": "array",
+      "description": "Array of placement solutions with transforms and scores",
+      "items": {
+        "type": "object",
+        "required": ["transform"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for this placement result"
+          },
+          "transform": {
+            "type": "object",
+            "description": "Geometric transformation to apply to the house footprint",
+            "properties": {
+              "rotation": {
+                "type": "object",
+                "properties": {
+                  "axis": {
+                    "type": "string",
+                    "enum": ["x", "y", "z"],
+                    "default": "z",
+                    "description": "Rotation axis"
+                  },
+                  "value": {
+                    "type": "number",
+                    "description": "Rotation angle value"
+                  },
+                  "units": {
+                    "type": "string",
+                    "enum": ["deg", "rad"],
+                    "default": "deg",
+                    "description": "Angle units"
+                  }
+                },
+                "required": ["value"]
+              },
+              "translation": {
+                "type": "object",
+                "properties": {
+                  "x": {
+                    "type": "number",
+                    "description": "Translation along X axis"
+                  },
+                  "y": {
+                    "type": "number",
+                    "description": "Translation along Y axis"
+                  },
+                  "z": {
+                    "type": "number",
+                    "default": 0,
+                    "description": "Translation along Z axis"
+                  },
+                  "units": {
+                    "type": "string",
+                    "default": "m",
+                    "description": "Length units"
+                  }
+                }
+              },
+              "scale": {
+                "oneOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "uniform": {
+                        "type": "number",
+                        "default": 1,
+                        "description": "Uniform scale factor"
+                      }
+                    }
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "x": {
+                        "type": "number",
+                        "description": "Scale factor along X"
+                      },
+                      "y": {
+                        "type": "number",
+                        "description": "Scale factor along Y"
+                      },
+                      "z": {
+                        "type": "number",
+                        "description": "Scale factor along Z"
+                      }
+                    }
+                  }
+                ],
+                "default": {
+                  "uniform": 1
+                }
+              }
+            }
+          },
+          "score": {
+            "type": "number",
+            "description": "Placement quality score (higher is better)"
+          },
+          "metrics": {
+            "type": "object",
+            "description": "Key performance indicators for this placement",
+            "additionalProperties": {
+              "type": ["number", "string", "boolean"]
+            }
+          },
+          "tags": {
+            "type": "array",
+            "description": "Descriptive tags for this placement",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "description": "Generated artifacts (geometry files, visualizations)",
+      "items": {
+        "type": "object",
+        "required": ["kind", "url"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["geojson", "gltf", "pdf", "csv", "png"],
+            "description": "Artifact type"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Download URL (typically SAS-signed)"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "URL expiration timestamp"
+          },
+          "label": {
+            "type": "string",
+            "description": "Human-readable label"
+          }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Execution metadata and provenance",
+      "properties": {
+        "definition": {
+          "type": "string",
+          "description": "Definition name (e.g., 'sitefit')"
+        },
+        "version": {
+          "type": "string",
+          "description": "Contract version (e.g., '1.0.0')"
+        },
+        "units": {
+          "type": "object",
+          "properties": {
+            "length": {
+              "type": "string",
+              "default": "m",
+              "description": "Length units"
+            },
+            "angle": {
+              "type": "string",
+              "default": "deg",
+              "description": "Angle units"
+            },
+            "crs": {
+              "type": "string",
+              "description": "Coordinate reference system"
+            }
+          }
+        },
+        "seed": {
+          "type": "integer",
+          "description": "Random seed used for this run"
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time",
+          "description": "Result generation timestamp"
+        },
+        "engine": {
+          "type": "object",
+          "description": "Compute engine information"
+        },
+        "cache_hit": {
+          "type": "boolean",
+          "default": false,
+          "description": "Whether this result was retrieved from cache"
+        },
+        "warnings": {
+          "type": "array",
+          "description": "Non-fatal warnings from execution",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

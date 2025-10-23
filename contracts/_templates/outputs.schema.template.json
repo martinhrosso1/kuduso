@@ -1,0 +1,87 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kuduso/contracts/{DEFINITION_NAME}/{VERSION}/outputs.schema.json",
+  "title": "{DEFINITION_TITLE} Outputs v{VERSION}",
+  "description": "Output schema for {DEFINITION_DESCRIPTION}",
+  "type": "object",
+  "required": ["results"],
+  "properties": {
+    "results": {
+      "type": "array",
+      "description": "Array of computation results",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "description": "Unique identifier for this result"
+          },
+          "score": {
+            "type": "number",
+            "description": "Quality score (higher is better)"
+          },
+          "metrics": {
+            "type": "object",
+            "description": "Key performance indicators",
+            "additionalProperties": {
+              "type": ["number", "string", "boolean"]
+            }
+          }
+        }
+      }
+    },
+    "artifacts": {
+      "type": "array",
+      "description": "Generated artifacts (geometry files, visualizations)",
+      "items": {
+        "type": "object",
+        "required": ["kind", "url"],
+        "properties": {
+          "kind": {
+            "type": "string",
+            "enum": ["geojson", "gltf", "pdf", "csv", "png"],
+            "description": "Artifact type"
+          },
+          "url": {
+            "type": "string",
+            "format": "uri",
+            "description": "Download URL"
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time",
+            "description": "URL expiration timestamp"
+          },
+          "label": {
+            "type": "string",
+            "description": "Human-readable label"
+          }
+        }
+      }
+    },
+    "metadata": {
+      "type": "object",
+      "description": "Execution metadata and provenance",
+      "properties": {
+        "definition": {
+          "type": "string"
+        },
+        "version": {
+          "type": "string"
+        },
+        "seed": {
+          "type": "integer"
+        },
+        "generated_at": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "cache_hit": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    }
+  },
+  "additionalProperties": false
+}

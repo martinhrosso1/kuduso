@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kuduso/contracts/sitefit/1.0.0/inputs.schema.json",
+  "title": "SiteFit Inputs v1.0.0",
+  "description": "Input schema for placing a house footprint onto a land parcel under constraints",
+  "type": "object",
+  "required": ["crs", "parcel", "house"],
+  "properties": {
+    "crs": {
+      "type": "string",
+      "pattern": "^EPSG:\\d+$",
+      "description": "Coordinate reference system (e.g., EPSG:5514, EPSG:3857)"
+    },
+    "parcel": {
+      "type": "object",
+      "required": ["coordinates"],
+      "properties": {
+        "coordinates": {
+          "type": "array",
+          "minItems": 4,
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number"
+            }
+          },
+          "description": "Closed ring [[x,y], ...] in CRS units"
+        }
+      },
+      "additionalProperties": false
+    },
+    "house": {
+      "type": "object",
+      "required": ["coordinates"],
+      "properties": {
+        "coordinates": {
+          "type": "array",
+          "minItems": 4,
+          "items": {
+            "type": "array",
+            "minItems": 2,
+            "maxItems": 2,
+            "items": {
+              "type": "number"
+            }
+          },
+          "description": "House footprint as closed ring [[x,y], ...] in CRS units"
+        }
+      },
+      "additionalProperties": false
+    },
+    "rotation": {
+      "type": "object",
+      "properties": {
+        "min": {
+          "type": "number",
+          "default": 0,
+          "description": "Minimum rotation angle in degrees"
+        },
+        "max": {
+          "type": "number",
+          "default": 180,
+          "description": "Maximum rotation angle in degrees"
+        },
+        "step": {
+          "type": "number",
+          "default": 5,
+          "minimum": 0.1,
+          "description": "Rotation step increment in degrees"
+        }
+      },
+      "additionalProperties": false
+    },
+    "grid_step": {
+      "type": "number",
+      "default": 0.5,
+      "minimum": 0.1,
+      "description": "Grid spacing for placement testing in meters (CRS units)"
+    },
+    "seed": {
+      "type": "integer",
+      "default": 1,
+      "description": "Random seed for deterministic results"
+    }
+  },
+  "additionalProperties": false
+}
