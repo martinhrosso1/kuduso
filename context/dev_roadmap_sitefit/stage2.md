@@ -1,350 +1,280 @@
-# Stage 2 — Messaging & Persistence (mock compute)
+**Stage 2 — Cloud Infrastructure (OpenTofu/Terragrunt)** 
 
-## Objectives
+Practical guide to **Stage 2 — Cloud Infrastructure (OpenTofu/Terragrunt)** in the *platform vs. app* split you chose. The goal is to stand up everything you’ll need for Stage 3 code to run against: **ACA env, Service Bus (namespace + per-app queue shells), Key Vault, Storage, Log Analytics, ACR, Supabase, AppServer, and a dev Rhino VM**—all reproducibly with IaC.
 
-* Introduce **durable messaging** (enqueue from API, consume in Worker).
-* Persist **job metadata** and **results** in Postgres/Supabase.
-* Keep AppServer mocked; the Worker calls it.
-* Preserve the same public API (`/jobs/run|status|result`) and frontend behavior.
 
-**Success criteria**
-
-* API returns `202 {job_id}`; Worker picks up the message, calls AppServer (mock), writes DB rows, and marks job `succeeded`.
-* Retries work for transient failures; poison messages land in a dead-letter bucket.
-* You can query status/result purely from the DB.
+* **Platform (shared, 1× per env)**
+  RG, **ACR**, **Log Analytics**, **Key Vault**, **Storage (Blob)**, **Service Bus namespace**, **ACA environment**, **AppServer (internal)**, **Rhino Compute dev VM** (public IP locked down).
+* **Per-app (sitefit)**
+  **Service Bus queue**, **API app (external)** and **Worker app (internal)** deployed to ACA with identities and secret refs (Worker min=0).
+* **Supabase** (DB+Auth) created and its `DATABASE_URL`, JWKS URL stored in **Key Vault**.
+* **Logs** land in Log Analytics; **secrets** are read from Key Vault; **images** pulled from ACR.
 
 ---
 
-## 1) Data model (SQL)
+# 2.1 Repo infra layout (recap)
 
-Create minimal tables (works for Postgres or Supabase). Adjust names if you already created them.
-
-```sql
--- 01_jobs.sql
-create table if not exists job (
-  id uuid primary key default gen_random_uuid(),
-  tenant_id uuid,
-  app_id text not null,
-  definition text not null,
-  version text not null,
-  status text not null check (status in ('queued','running','succeeded','failed')),
-  inputs_hash text not null,
-  payload_json jsonb not null,                 -- validated + defaults applied
-  attempts int not null default 0,
-  last_error jsonb,
-  priority int not null default 100,
-  created_at timestamptz not null default now(),
-  started_at timestamptz,
-  ended_at timestamptz
-);
-
-create index if not exists job_status_idx on job(status, created_at);
-create index if not exists job_inputs_hash_idx on job(inputs_hash);
-
--- 02_results.sql
-create table if not exists result (
-  id uuid primary key default gen_random_uuid(),
-  job_id uuid not null references job(id) on delete cascade,
-  outputs_json jsonb not null,
-  score numeric,
-  created_at timestamptz not null default now()
-);
-
--- Optional: artifacts table if you want rows per artifact
-create table if not exists artifact (
-  id uuid primary key default gen_random_uuid(),
-  job_id uuid not null references job(id) on delete cascade,
-  kind text not null,
-  url text not null,
-  expires_at timestamptz
-);
+```
+infra/
+  modules/
+    shared-core/          # RG, ACR, LAW, KV, Storage, SB namespace, ACA env
+    shared-appserver/     # ACA: AppServer (internal), roles, secret refs
+    app-stack/            # ACA: API (ext), Worker (int), SB queue, KEDA
+    rhino-vm/             # dev-only Windows VM + NSG
+    # later: rhino-vmss-ilb/, network/, dns/
+  live/
+    dev/
+      shared/
+        core/             # -> modules/shared-core
+        rhino/            # -> modules/rhino-vm
+        appserver/        # -> modules/shared-appserver
+      apps/
+        sitefit/          # -> modules/app-stack
+    # prod/ mirrors dev/
+terragrunt.hcl            # root: state, providers, tags
 ```
 
-**Notes**
-
-* `payload_json` stores the **clean, validated** inputs your Worker will pass to AppServer.
-* Keep artifacts in `outputs_json.artifacts` for MVP; split later only if needed.
-* Supabase: add RLS later; for now, focus on the loop.
+> Terragrunt glues modules with dependencies so `run-all apply` brings them up in the right order.
 
 ---
 
-## 2) Message contract (API → Queue)
+# 2.2 Order of operations (dev environment)
 
-Define one **message shape**; store it next to contracts so all services import it.
+1. **shared/core** → 2) **push images to ACR** → 3) **shared/rhino** → 4) **shared/appserver** → 5) **apps/sitefit**
 
-```json
-{
-  "job_id": "uuid",
-  "tenant_id": "uuid",
-  "app_id": "string",
-  "definition": "{definition_name}",
-  "version": "x.y.z",
-  "inputs_hash": "sha256-hex",
-  "requested_at": "iso8601",
-  "payload": { /* contracts/<def>/<ver>/inputs.schema.json */ },
-  "priority": 100
-}
+---
+
+# 2.3 Module contracts (inputs/outputs)
+
+## `shared-core` (once per env)
+
+* **Inputs:** `name_prefix`, `location`, `tags`
+* **Creates:** RG, ACR, LAW, KV, Storage (+ container `artifacts`), SB namespace, ACA environment
+* **Outputs:** `resource_group_name`, `acr_server`, `kv_id`, `kv_name`, `sb_namespace_name`, `storage_account_name`, `acaenv_id`
+
+## `shared-appserver`
+
+* **Inputs:** `core_rg_name`, `acr_server`, `acaenv_id`, `kv_name`, `image`, `contracts_dir`, `use_compute`, `compute_url`, `compute_api_key_kv_secret_name`
+* **Creates:** ACA internal app (**AppServer**) with Managed Identity, secret refs, ACR pull
+* **Outputs:** `appserver_internal_fqdn`, `principal_id`
+
+## `app-stack` (per app)
+
+* **Inputs:** `app_id`, `core_rg_name`, `acr_server`, `acaenv_id`, `kv_name`, `sb_namespace_name`, `storage_account`, images, queue name, env vars, KV secret names
+* **Creates:** SB **queue**, ACA **API (external)** + **Worker (internal)** with KEDA scaler, MI, secret refs, ACR pull
+* **Outputs:** `api_fqdn`, `queue_name`, `api_principal_id`, `worker_principal_id`
+
+## `rhino-vm` (dev only)
+
+* **Inputs:** `resource_group`, `name_prefix`, `location`, `allowed_source_ip`, `vm_size`
+* **Creates:** Windows VM, Public IP, NSG (80/8081 inbound only from allowed IP)
+* **Outputs:** `public_ip`
+
+---
+
+# 2.4 Terragrunt files (essentials)
+
+## Root `infra/terragrunt.hcl`
+
+* Sets **azurerm** provider, remote state in Azure Storage, global `tags`.
+
+## `live/dev/shared/core/terragrunt.hcl`
+
+* `source = ../../../modules/shared-core`
+* Inputs: `name_prefix="kuduso-dev"`, `location="westeurope"`
+
+## `live/dev/shared/rhino/terragrunt.hcl`
+
+* Depends on **core** (for RG)
+* Inputs: `allowed_source_ip = ${env.MY_IP}` → lock down the VM
+
+## `live/dev/shared/appserver/terragrunt.hcl`
+
+* Depends on **core** and **rhino**
+* Inputs:
+  `image = "<acr>/appserver-node:${env.IMG_SHA}"`,
+  `use_compute=false` (flip later),
+  `compute_url = "http://<rhino_public_ip>:8081/"`,
+  `compute_api_key_kv_secret_name="COMPUTE-API-KEY"`
+
+## `live/dev/apps/sitefit/terragrunt.hcl`
+
+* Depends on **core** and **appserver**
+* Inputs:
+  `api_image="<acr>/api-fastapi:${env.IMG_SHA}"`,
+  `worker_image="<acr>/worker-fastapi:${env.IMG_SHA}"`,
+  `queue_name="jobs-sitefit"`,
+  `appserver_url="http://aca-appserver.internal/gh/{def}:{ver}/solve"`,
+  KV secret names: `DATABASE-URL`, `SERVICEBUS-CONN`, `BLOB-SAS-SIGNING`
+
+---
+
+# 2.5 Supabase (DB + Auth)
+
+* Create manually in the Supabase UI now (fast).
+
+**Minimum you need for Stage 2 outputs:**
+
+* `DATABASE_URL` (service role or privileged URL for the API/Worker)
+* `JWT_JWKS_URL` (for API to verify user tokens)
+
+**Store both in Key Vault** (`DATABASE-URL` secret; JWKS URL as plain env var in `app-stack` module).
+
+> **Schema/RLS:** DO NOT model tables in TF. Keep migrations (DDL/RLS/seed) in your app repo and run them from CI once `DATABASE_URL` is live.
+
+---
+
+# 2.6 Secrets model (Stage 2)
+
+Create in **Key Vault** (once per env):
+
+* `DATABASE-URL` → Supabase connection string
+* `SERVICEBUS-CONN` → (Stage 2: connection string; later switch to RBAC/MI)
+* `BLOB-SAS-SIGNING` → Storage account key (or use MI + user delegation SAS later)
+* `COMPUTE-API-KEY` → For Rhino.Compute
+
+The modules reference them via **ACA KeyVaultRef**:
+
+```
+secret { name="database-url" value="keyvaultref://<kv-name>/secrets/DATABASE-URL" }
 ```
 
-**Headers/properties** to include when sending:
+and map to env:
 
-* `x-correlation-id`
-* `attempt` (starts at 0; the queue may maintain delivery count too)
-* `session_id` (optional, e.g., `tenant_id` if you later want ordered processing per tenant)
-
----
-
-## 3) API changes (producer)
-
-Replace the Stage-1 synchronous call with **DB write + enqueue**.
-
-**Flow**
-
-1. Validate envelope + `inputs` against `inputs.schema.json` (same as Stage 1).
-2. **Materialize defaults** in `inputs` (important for hashing).
-3. Compute `inputs_hash`.
-4. **(Optional idempotency):** if an identical `inputs_hash` already has a `succeeded` result, short-circuit and return that `job_id`.
-5. Insert `job` row with `status='queued'`.
-6. **Send message** to the queue with the fields above.
-7. Return `202 {job_id}`.
-
-**Python (FastAPI) – producer sketch**
-
-```python
-# apps/api-fastapi/queue.py
-import os, json, hashlib, uuid, datetime as dt
-from azure.servicebus.aio import ServiceBusClient
-from azure.servicebus import ServiceBusMessage
-
-SB_CONN = os.getenv("SERVICEBUS_CONN")
-SB_QUEUE = os.getenv("SERVICEBUS_QUEUE")
-
-def norm_hash(inputs: dict, definition: str, version: str) -> str:
-    s = json.dumps(inputs, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
-    return hashlib.sha256((s + definition + version).encode()).hexdigest()
-
-async def send_job(job, cid: str):
-    payload = {
-        "job_id": str(job["id"]),
-        "tenant_id": str(job.get("tenant_id") or ""),
-        "app_id": job["app_id"],
-        "definition": job["definition"],
-        "version": job["version"],
-        "inputs_hash": job["inputs_hash"],
-        "requested_at": dt.datetime.utcnow().isoformat() + "Z",
-        "payload": job["payload_json"],
-        "priority": job.get("priority", 100),
-    }
-    msg = ServiceBusMessage(
-        body=json.dumps(payload),
-        application_properties={"x-correlation-id": cid, "priority": payload["priority"]}
-    )
-    async with ServiceBusClient.from_connection_string(SB_CONN) as client:
-        sender = client.get_queue_sender(SB_QUEUE)
-        async with sender:
-            await sender.send_messages(msg)
+```
+env { name="DATABASE_URL" secret_name="database-url" }
 ```
 
-**DB insert (psycopg / SQLAlchemy)**
+Each Container App gets **system-assigned identity**; modules grant **AcrPull** and **Key Vault Secrets User** roles.
 
-```python
-job_id = uuid.uuid4()
-await db.execute(
-    """insert into job(id, tenant_id, app_id, definition, version, status, inputs_hash, payload_json)
-       values (:id, :tenant_id, :app_id, :def, :ver, 'queued', :hash, :payload)""",
-    {"id": job_id, "tenant_id": tenant_id, "app_id": app_id, "def": definition, "ver": version,
-     "hash": inputs_hash, "payload": inputs_clean}
-)
-await send_job({...same fields...}, cid)
-return {"job_id": str(job_id)}
+---
+
+# 2.7 KEDA scaler (Worker)
+
+In `app-stack` the Worker template includes:
+
+* `min_replicas = 0`, `max_replicas = <<= Rhino seats>`
+* **Scale rule** type `azure-servicebus` on the **per-app queue**, e.g.:
+
+  * `metadata: { namespace=<sb_ns>, queueName=<queue>, messageCount="5" }`
+  * `auth: { secret_name="servicebus-conn", trigger_parameter="connection" }`
+
+> Later you can switch to **Managed Identity** auth on Premium SB; adjust the scaler accordingly.
+
+---
+
+# 2.8 Build & push images
+
+After **shared/core** creates ACR:
+
+```bash
+GIT_SHA=$(git rev-parse --short HEAD)
+ACR=$(terragrunt -chdir=infra/live/dev/shared/core output -raw acr_server)
+
+docker build -t $ACR/appserver-node:$GIT_SHA ./shared/appserver-node
+docker build -t $ACR/api-fastapi:$GIT_SHA     ./apps/sitefit/api-fastapi
+docker build -t $ACR/worker-fastapi:$GIT_SHA  ./apps/sitefit/worker-fastapi
+
+az acr login -n ${ACR%%.*}
+docker push $ACR/appserver-node:$GIT_SHA
+docker push $ACR/api-fastapi:$GIT_SHA
+docker push $ACR/worker-fastapi:$GIT_SHA
+
+export IMG_SHA=$GIT_SHA
 ```
 
-**Status/Result endpoints** stay the same but now read from DB:
-
-* `/jobs/status/{job_id}`: read `status`, `attempts`, `last_error`
-* `/jobs/result/{job_id}`: join `result` by `job_id`
-
 ---
 
-## 4) Worker (consumer) — with lock renewal
+# 2.9 Apply (dev)
 
-The Worker receives messages, calls the **mock AppServer**, persists results, and completes the message. Add **lock renewal** for runs that take longer than the initial lock.
+```bash
+# optional: prep KV secrets first, or do it between steps below
+cd infra/live/dev
 
-**Python (FastAPI runner or plain script) – consumer sketch**
+# 1) Platform core
+terragrunt run-all apply --terragrunt-include-dir shared/core
 
-```python
-# apps/worker-fastapi/runner.py
-import asyncio, os, json, datetime as dt
-from azure.servicebus.aio import ServiceBusClient
-from azure.servicebus import ServiceBusMessage
-import httpx
-import asyncpg
+# 2) Add secrets to Key Vault (from outputs/known values)
+KV=$(terragrunt -chdir=shared/core output -raw kv_name)
+az keyvault secret set --vault-name $KV --name DATABASE-URL     --value "<supabase-url>"
+az keyvault secret set --vault-name $KV --name SERVICEBUS-CONN  --value "Endpoint=sb://..."
+az keyvault secret set --vault-name $KV --name BLOB-SAS-SIGNING --value "<storage-key>"
+az keyvault secret set --vault-name $KV --name COMPUTE-API-KEY  --value "<rhino-key>"
 
-SB_CONN = os.getenv("SERVICEBUS_CONN")
-SB_QUEUE = os.getenv("SERVICEBUS_QUEUE")
-APP_SERVER_URL = os.getenv("APP_SERVER_URL", "http://localhost:8080/gh/{def}:{ver}/solve")
-DB_URL = os.getenv("DATABASE_URL")
-LOCK_RENEW_SEC = int(os.getenv("LOCK_RENEW_SEC", "45"))
-JOB_TIMEOUT_SEC = int(os.getenv("JOB_TIMEOUT_SEC", "240"))
+# 3) Rhino VM (dev)
+MY_IP=$(curl -s ifconfig.me)/32
+export MY_IP
+terragrunt run-all apply --terragrunt-include-dir shared/rhino
 
-async def process_message(session, message, pool):
-    cid = (message.application_properties or {}).get(b"x-correlation-id", "").decode() or "no-cid"
-    body = json.loads(str(message))
-    job_id = body["job_id"]
-    async with pool.acquire() as conn:
-        # mark running, increment attempts
-        await conn.execute(
-            """update job set status='running', attempts=attempts+1, started_at=now()
-               where id = $1""", job_id
-        )
-    # call AppServer (mock)
-    url = APP_SERVER_URL.format(def=body["definition"], ver=body["version"])
-    try:
-        async with httpx.AsyncClient(timeout=JOB_TIMEOUT_SEC) as client:
-            # lock renewal task
-            async def renew():
-                while True:
-                    await asyncio.sleep(LOCK_RENEW_SEC)
-                    try:
-                        await session.renew_message_lock(message)
-                    except Exception:
-                        break
-            renew_task = asyncio.create_task(renew())
+# 4) AppServer (internal)
+export IMG_SHA
+terragrunt run-all apply --terragrunt-include-dir shared/appserver
 
-            resp = await client.post(url, json=body["payload"], headers={"x-correlation-id": cid})
-            renew_task.cancel()
-
-        if resp.status_code != 200:
-            raise RuntimeError(f"AppServer {resp.status_code}: {resp.text}")
-
-        outputs = resp.json()
-        async with pool.acquire() as conn:
-            await conn.execute(
-                "insert into result(job_id, outputs_json, score) values ($1, $2, $3)",
-                job_id, json.dumps(outputs), outputs.get("results", [{}])[0].get("score")
-            )
-            await conn.execute(
-                "update job set status='succeeded', ended_at=now(), last_error=null where id=$1",
-                job_id
-            )
-        await session.complete_message(message)
-    except Exception as e:
-        async with pool.acquire() as conn:
-            await conn.execute(
-                "update job set status='failed', ended_at=now(), last_error=$2 where id=$1",
-                job_id, json.dumps({"message": str(e)})
-            )
-        # Rely on queue retry policy:
-        await session.abandon_message(message)
-
-async def main():
-    pool = await asyncpg.create_pool(dsn=DB_URL, min_size=1, max_size=2)
-    async with ServiceBusClient.from_connection_string(SB_CONN) as client:
-        receiver = client.get_queue_receiver(queue_name=SB_QUEUE, max_wait_time=5)
-        async with receiver:
-            while True:
-                messages = await receiver.receive_messages(max_message_count=1)
-                if not messages: continue
-                for m in messages:
-                    async with receiver:
-                        await process_message(receiver, m, pool)
-
-if __name__ == "__main__":
-    asyncio.run(main())
+# 5) Sitefit app (API + Worker + Queue)
+terragrunt run-all apply --terragrunt-include-dir apps/sitefit
 ```
 
-**Behavior**
+---
 
-* Updates job to `running`, increments `attempts`.
-* Calls AppServer (mock).
-* Writes `result` row; marks job `succeeded`.
-* On error: writes `failed` and `last_error`, **abandons** the message (queue applies retry/backoff). After max deliveries, the broker dead-letters it.
+# 2.10 Verifications (infra-only smoke)
+
+* **ACA env:** exists; three apps deployed (AppServer internal, API external, Worker internal).
+* **Service Bus:** namespace exists; **queue `jobs-sitefit`** exists; DLQ enabled.
+* **Key Vault:** secrets are present; API/Worker/AppServer identities have **Key Vault Secrets User**.
+* **ACR pulls:** all container apps run with images from your ACR.
+* **Storage:** account + container `artifacts` exist.
+* **Logs:** see ACA logs in **Log Analytics** (ContainerAppConsoleLogs_CL).
+* **Rhino VM:** reachable on `http://<public_ip>:8081/` only from your IP (you’ll point AppServer later).
+
+> At this point, **no business traffic** yet—Stage 3 turns on the code paths that use SB + Supabase with the **mock** compute.
 
 ---
 
-## 5) Retry, DLQ, and idempotency
+# 2.11 Security & minimum hardening (Stage 2)
 
-* **Retry policy**: set **max delivery count** (e.g., 5). The queue handles backoff; your Worker just **abandons** on transient errors.
-* **DLQ**: when a message exceeds max deliveries or you explicitly dead-letter, it goes to the dead-letter sub-queue. Add a tiny admin script later to **peek/repair/replay**.
-* **Idempotency**:
-
-  * API computes `inputs_hash` and stores it in `job.inputs_hash`.
-  * (Optional) Before processing, the Worker can check if a `succeeded` result with the same `inputs_hash` already exists and **short-circuit** (update job to reuse that result) to avoid recompute.
-  * Always pass the same `payload` forward (defaults materialized), so hashing is stable.
-
----
-
-## 6) Observability (local)
-
-* **Correlation ID**: API generates or propagates `x-correlation-id`; publish it as a message property; Worker forwards to AppServer.
-* **Logs**: print structured JSON lines with `cid, job_id, status, attempt, definition@version`.
-* **Counters** (even simple printouts now): messages received, completed, abandoned; avg mock latency.
+* **Ingress**: API **external**, AppServer/Worker **internal-only**.
+* **CORS**: API limited to your Vercel domains (configure later in app).
+* **Secrets**: only in Key Vault; never inline in Terragrunt inputs.
+* **RBAC**: identities have only **AcrPull** + **KV Secrets User**; nothing more.
+* **Rhino VM**: NSG allows 80/8081 only from `MY_IP` (or your NAT egress); API key set.
+* **Quota caps**: in `app-stack`, set Worker `max_replicas` ≤ Rhino seats.
 
 ---
 
-## 7) Local run & dev ergonomics
+# 2.12 Cost guardrails
 
-* Use a **real** Service Bus namespace for dev (no official emulator). For unit tests you can stub `send_job`/`receive_messages`.
-* Docker Compose (optional) for Postgres:
-
-  ```yaml
-  services:
-    db:
-      image: postgis/postgis:16-3.4
-      ports: ["5432:5432"]
-      environment: { POSTGRES_PASSWORD: postgres, POSTGRES_USER: postgres, POSTGRES_DB: housefit }
-  ```
-* Env vars:
-
-  ```
-  DATABASE_URL=postgres://postgres:postgres@localhost:5432/housefit
-  SERVICEBUS_CONN=Endpoint=sb://...;SharedAccessKeyName=...;SharedAccessKey=...;
-  SERVICEBUS_QUEUE=housefit-jobs
-  APP_SERVER_URL=http://localhost:8080/gh/{def}:{ver}/solve
-  LOCK_RENEW_SEC=45
-  JOB_TIMEOUT_SEC=240
-  ```
-
-**Run order (3 terminals)**
-
-1. **AppServer (mock)**: `pnpm -C apps/appserver-node dev`
-2. **API**: `uvicorn apps/api-fastapi.main:app --reload --port 8081`
-3. **Worker**: `python apps/worker-fastapi/runner.py`
-4. **Frontend**: `pnpm -C apps/frontend dev` (optional; you can just hit the API)
+* **Worker** `min=0`.
+* **AppServer** `min=1` (or 0 if okay with cold starts).
+* **Log Analytics** retention 30d; set a daily cap.
+* **SB** Standard tier.
+* **Storage** LRS; no premium needed.
 
 ---
 
-## 8) Tests (e2e with queue)
+# 2.13 Common pitfalls
 
-* **Happy path**: POST `/jobs/run` → poll `/jobs/status` until `succeeded` → GET `/jobs/result` validates against `outputs.schema.json`.
-* **Retry path**: make AppServer fail once (e.g., env `FAIL_ONCE=true`) → Worker abandons → second delivery succeeds.
-* **DLQ path**: force repeated failures → message lands in DLQ; job ends `failed` with `last_error`.
-
-Tip: mark these “slow” and separate from unit tests.
-
----
-
-## 9) Security & secrets (dev level)
-
-* Keep connection strings in `.env` (dev only).
-* Stage 3 will move secrets to **Key Vault** and services to **managed identity**.
+* **Secrets in state**: don’t pass raw secrets to modules—write to KV then reference `keyvaultref://`.
+* **Unbounded worker scale**: cap `max_replicas`; keep KEDA threshold sensible (`messageCount=5–20`).
+* **Forgetting identities/RBAC**: ensure each Container App has **system-assigned identity** and gets **AcrPull** + **KV Secrets User**.
+* **Rhino wide-open**: keep NSG tight; later move to **VMSS + ILB** (no public IP).
 
 ---
 
-## 10) Exit checklist (Stage 2)
+# 2.14 Handoff to Stage 3
 
-* [ ] API writes `job` row (queued), **enqueues** a message, and returns `202 {job_id}`.
-* [ ] Worker **receives → calls mock AppServer → writes `result` → completes** the message.
-* [ ] `/jobs/status` and `/jobs/result` read from DB and work reliably.
-* [ ] Retries observed (abandon once, then succeed); DLQ observed for poison.
-* [ ] Correlation IDs flow through logs; minimal metrics visible (counts/timings).
-* [ ] Frontend behavior unchanged (button → status → result).
+With infra live:
+
+* Put `NEXT_PUBLIC_API_BASE_URL` (from `apps/sitefit.api_fqdn`) into your frontend env.
+* Configure **API** and **Worker** app settings (already templated in `app-stack`):
+  `SERVICEBUS_QUEUE`, `SERVICEBUS_CONN` (or MI later), `DATABASE_URL`, `BLOB_SAS_SIGNING`, `APP_SERVER_URL`, `JWT_JWKS_URL`.
+* Stage 3 will:
+
+  * flip API from local/in-memory → **enqueue to SB** and **write to Supabase**,
+  * start Worker (scale from 0) to consume queue and call **AppServer (mock)**,
+  * use **Blob SAS** for artifacts.
 
 ---
 
-## 11) What’s next (why Stage 3 will be easy)
+### TL;DR
 
-* Swapping to cloud is mostly **infra**: ACA, Service Bus namespace, Blob SAS, Key Vault.
-* **Code** paths don’t change: API still enqueues and reads DB; Worker still consumes and calls AppServer; AppServer is still a black box (will flip from mock to Rhino in Stage 4).
-
-That’s Stage 2 in depth—durable, observable, and still fast to iterate locally while staying aligned with the final architecture.
+Stage 2 gives you a **running cloud platform + app shells** with **OpenTofu/Terragrunt**: ACA env, SB ns + app queue, KV, Storage, ACR, Log Analytics, AppServer (internal), Rhino dev VM, and Supabase wired via KV. Nothing else in your code changes yet—Stage 3 simply switches the code to use this infra while still mocking compute.

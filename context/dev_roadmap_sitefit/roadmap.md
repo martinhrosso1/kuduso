@@ -37,42 +37,72 @@ Awesome—here’s a pragmatic, step-by-step roadmap from “empty repo” to a 
 
 ---
 
-# Stage 2 — Messaging & Persistence (still mocked compute)
+ Stage 2 — **Cloud Infrastructure (OpenTofu/Terragrunt)** ✅ (new order)
 
-**Goal:** Replace in-memory bits with real plumbing.
+**Goal:** Stand up the **platform** and **per-app** cloud resources now (dev env). Keep compute mocked for the moment.
 
-**Build**
+**Build (IaC only; no code changes)**
 
-* **DB**: Postgres (or Supabase) tables: `job`, `result`, `parcel`, `house` (or generic names).
-* **Service Bus**:
+* **Platform (shared) — one per env**
 
-  * API sends a **message** on `/jobs/run` (with `job_id`, `definition`, `version`, `inputs_hash`).
-  * **Worker (FastAPI)** consumes with **peek-lock + lock renewal**, calls AppServer (still mocked), writes result to DB, completes message.
-* **Blob**: add stub for artifact URLs (wire real SAS later).
+  * Resource Group, **ACR**, **Log Analytics**, **Key Vault**, **Storage (Blob)**, **Service Bus namespace**, **ACA environment**.
+  * **Rhino Compute (dev)**: 1× Windows VM (public IP locked to your IP), API key; VMSS+ILB comes later.
+  * **Shared AppServer (ACA)**: internal ingress; image deployed; `USE_COMPUTE=false` by default.
+* **Per-app (sitefit)**
+
+  * **Service Bus queue** for the app.
+  * **API (ACA, external)** & **Worker (ACA, internal)** apps created (images deployed), but:
+
+    * API still allowed to run in “local/mock mode” (sync call) until Stage 3,
+    * Worker can be deployed but **paused** (min replicas 0) until Stage 3.
+* **Supabase (DB + Auth)**
+
+  * Create project (via TF provider or manually), capture `DATABASE_URL` and JWKS URL.
+  * (Schema migrations remain in repo; don’t model tables in TF.)
+* **Secrets**
+
+  * Store **DATABASE_URL**, **SERVICEBUS_CONN** (or plan RBAC), **BLOB SAS signing key**, **COMPUTE_API_KEY** in **Key Vault**.
+  * Grant **AcrPull** + **Key Vault Secrets User** to API/Worker/AppServer identities.
+* **Repo/infra layout**
+
+  * `infra/modules/{shared-core,shared-appserver,app-stack,rhino-vm}`
+  * `infra/live/dev/{shared/{core,appserver,rhino},apps/sitefit}` with Terragrunt.
 
 **Exit criteria**
 
-* Enqueue → Worker consumes → DB has result → UI shows it.
-* Retries work (abandon once, then succeed).
+* `terragrunt run-all apply` brings up ACR, KV, LAW, Storage, SB ns, ACA env, Rhino VM, AppServer, and app shells (API/Worker).
+* API reachable over HTTPS; AppServer reachable internally.
+* Secrets resolved from Key Vault; logs visible in Log Analytics.
 
 ---
 
-# Stage 3 — Minimal Cloud Deploy (prod-ish shape)
+# Stage 3 — **Messaging & Persistence (cloud-backed, still mocked compute)** ✅ (new order)
 
-**Goal:** Same flow, running in Azure.
+**Goal:** Replace local/in-memory bits with **Service Bus + Supabase**, using the infra from Stage 2. Keep AppServer’s **mock** solver.
 
-**Build**
+**Build (code + config)**
 
-* **ACA**: deploy API (external), Worker (internal), AppServer (internal) in one environment + VNet.
-* **Service Bus**: namespace + queue; grant access (Managed Identity or key).
-* **Blob**: real SAS generation from API.
-* **Key Vault**: store secrets; services read via MI.
-* **Rhino VM**: create Windows VM; install Rhino.Compute (ok to test with temporary restricted public IP + API key).
+* **API (producer)**
+
+  * Validate envelope + inputs (materialize defaults).
+  * Compute `inputs_hash`; write `job(status='queued', …)` to **Supabase**.
+  * **Enqueue** message to **Service Bus** (`job_id`, `definition`, `version`, `inputs_hash`, payload, ids).
+  * Return `202 {job_id}`; `/status` & `/result` read from **Supabase**.
+* **Worker (consumer)**
+
+  * **Peek-lock + lock renewal**; call **AppServer (mock)**; write `result` to **Supabase**; **complete** message.
+  * Abandon on transient; DLQ on poison; 1 job/replica; **KEDA** scales on queue length.
+* **Artifacts**
+
+  * Implement real **Blob SAS** generation in API; store artifact refs in DB.
+* **Observability**
+
+  * Log `x-correlation-id`, `job_id`, `app_id`, `tenant_id`, `definition@version` across hops.
 
 **Exit criteria**
 
-* Public URL → “Run” → result appears; artifacts download via SAS.
-* Logs visible in Log Analytics; correlation IDs flow.
+* Enqueue → Worker consumes → DB has result → UI shows it; artifacts fetch via SAS.
+* Retries work (abandon once, then succeed); DLQ holds poison messages.
 
 ---
 
