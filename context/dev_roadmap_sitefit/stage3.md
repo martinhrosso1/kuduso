@@ -1,292 +1,299 @@
-# Stage 3 — Minimal Cloud Deploy (prod-ish shape)
+# Stage 3 — **Messaging & Persistence (cloud-backed, still mocked compute)** 
 
-## Objectives
+# 3.1 What changes now (at a glance)
 
-* **Platform (shared)**: ACR, Log Analytics, Key Vault, Service Bus **namespace**, Storage, **ACA environment**, **AppServer** (internal), and a temporary **Rhino VM**.
-* **Per-app (sitefit)**: API (external), Worker (internal) with **KEDA** on **its own queue** in the shared namespace.
-* Same endpoints as local: `/jobs/run | /jobs/status/{id} | /jobs/result/{id}`.
-* Artifacts via **Blob SAS**. Secrets via **Key Vault**. Logs in **Log Analytics**.
+* **API** stops doing in-memory storage / sync compute. It now:
 
-Repo paths below match your structure:
+  1. Validates and **materializes defaults**.
+  2. Inserts a `job` row in **Supabase** (`status='queued'`).
+  3. **Enqueues** a message to **Azure Service Bus**.
+  4. Returns `202 {job_id}`. Status/result endpoints read from **Supabase**.
 
-```
-kuduso/
-  infra/
-    modules/{shared-core,shared-appserver,app-stack,rhino-vm}
-    live/dev/{shared/{core,appserver,rhino}, apps/sitefit}
-```
+* **Worker** starts consuming the queue:
 
----
+  1. **Peek-lock** + **lock renewal** during compute.
+  2. Calls **AppServer (mock)**.
+  3. Writes `result` to **Supabase**, **completes** the message.
+  4. Abandons on transient; **DLQs** poison.
 
-## 0) Prereqs (one time)
+* **Artifacts**: API generates **Blob SAS** URLs for big outputs and stores refs in DB.
 
-* Azure subscription + CLI login.
-* OpenTofu (or Terraform) + Terragrunt installed.
-* **Supabase** (or Postgres) ready; you have a `DATABASE_URL`.
-* Your three images build locally:
-
-  * `shared/appserver-node`
-  * `apps/sitefit/api-fastapi`
-  * `apps/sitefit/worker-fastapi`
-
-Tip: create an Azure **resource group & storage** for TF state once (outside Terragrunt) or reuse an existing one.
+* **Observability**: consistent **correlation IDs** and job metadata in logs; KEDA scales the Worker on queue depth.
 
 ---
 
-## 1) Build & push images → ACR (dev)
+# 3.2 Configuration (env & secrets)
 
-From repo root:
+Set via ACA env (most values come from **Key Vault** refs you created in Stage 2):
 
-```bash
-# 1) Build images (tag with Git SHA)
-GIT_SHA=$(git rev-parse --short HEAD)
+**API (FastAPI)**
 
-docker build -t appserver-node:$GIT_SHA ./shared/appserver-node
-docker build -t sitefit-api:$GIT_SHA   ./apps/sitefit/api-fastapi
-docker build -t sitefit-worker:$GIT_SHA ./apps/sitefit/worker-fastapi
-
-# 2) Deploy CORE to get ACR endpoint first (see step 2), then login & push
+```
+DATABASE_URL=secretref:DATABASE-URL
+SERVICEBUS_CONN=secretref:SERVICEBUS-CONN         # (RBAC/MI later)
+SERVICEBUS_QUEUE=jobs-<app_id>
+APP_SERVER_URL=http://aca-appserver.internal/gh/{def}:{ver}/solve
+JWT_JWKS_URL=https://<supabase>.supabase.co/auth/v1/keys
+BLOB_ACCOUNT=<storage-account-name>
+BLOB_SAS_SIGNING=secretref:BLOB-SAS-SIGNING       # account key or use MI→user delegation SAS later
+RESULT_CACHE_TTL=300
 ```
 
-You’ll push after **core** creates ACR.
+**Worker (FastAPI)**
 
----
-
-## 2) Bring up the **platform core** (shared)
-
-From `kuduso/infra/live/dev/shared/core`:
-
-```bash
-terragrunt init
-terragrunt apply
+```
+DATABASE_URL=secretref:DATABASE-URL
+SERVICEBUS_CONN=secretref:SERVICEBUS-CONN
+SERVICEBUS_QUEUE=jobs-<app_id>
+APP_SERVER_URL=http://aca-appserver.internal/gh/{def}:{ver}/solve
+LOCK_RENEW_SEC=45
+JOB_TIMEOUT_SEC=240
+MAX_ATTEMPTS=5
 ```
 
-**Outputs you’ll use**:
+**AppServer (Node, still mock)**
 
-* `acr_server` (e.g., `kudusodevacr.azurecr.io`)
-* `kv_name`
-* `sb_namespace_name`
-* `storage_account_name`
-* `acaenv_id`
-* `resource_group_name`
-
-Now **push images**:
-
-```bash
-ACR=$(terragrunt output -raw acr_server)
-az acr login -n ${ACR%%.*}
-
-docker tag appserver-node:$GIT_SHA $ACR/appserver-node:$GIT_SHA
-docker tag sitefit-api:$GIT_SHA   $ACR/api-fastapi:$GIT_SHA
-docker tag sitefit-worker:$GIT_SHA $ACR/worker-fastapi:$GIT_SHA
-
-docker push $ACR/appserver-node:$GIT_SHA
-docker push $ACR/api-fastapi:$GIT_SHA
-docker push $ACR/worker-fastapi:$GIT_SHA
+```
+USE_COMPUTE=false
+CONTRACTS_DIR=/contracts/<def>/<ver>
+TIMEOUT_MS=240000
 ```
 
 ---
 
-## 3) Load secrets into **Key Vault** (shared)
+# 3.3 Supabase schema (minimal, normalized enough)
 
-Find KV name:
+> You can create these via SQL migrations (Alembic/Flyway). Keep RLS simple for now; enforce tenancy later.
 
-```bash
-KV=$(terragrunt -chdir=../core output -raw kv_name)
+```sql
+-- job state
+create table if not exists job (
+  id uuid primary key default gen_random_uuid(),
+  tenant_id uuid,
+  app_id text not null,
+  definition text not null,
+  version text not null,
+  status text not null check (status in ('queued','running','succeeded','failed')),
+  inputs_hash text not null,
+  payload_json jsonb not null,                 -- materialized defaults
+  attempts int not null default 0,
+  priority int not null default 100,
+  last_error jsonb,
+  created_at timestamptz not null default now(),
+  started_at timestamptz,
+  ended_at timestamptz
+);
+
+create index if not exists job_status_idx on job(status, created_at);
+create index if not exists job_inputs_hash_idx on job(inputs_hash);
+
+-- result payload
+create table if not exists result (
+  id uuid primary key default gen_random_uuid(),
+  job_id uuid not null references job(id) on delete cascade,
+  outputs_json jsonb not null,
+  score numeric,
+  created_at timestamptz not null default now()
+);
+
+-- optional per-artifact rows; you can also keep inside outputs_json.artifacts
+create table if not exists artifact (
+  id uuid primary key default gen_random_uuid(),
+  job_id uuid not null references job(id) on delete cascade,
+  kind text not null,
+  url text not null,
+  expires_at timestamptz
+);
 ```
 
-Add secrets (replace values):
+---
 
-```bash
-az keyvault secret set --vault-name $KV --name DATABASE-URL      --value "postgres://..."
-az keyvault secret set --vault-name $KV --name SERVICEBUS-CONN   --value "Endpoint=sb://...;SharedAccessKey=..."
-az keyvault secret set --vault-name $KV --name BLOB-SAS-SIGNING  --value "<account-key-or-user-delegation-tok>"
-az keyvault secret set --vault-name $KV --name COMPUTE-API-KEY   --value "<rhino-compute-api-key>"
+# 3.4 Message contract (API → Service Bus)
+
+Keep it next to contracts for reuse:
+
+```json
+{
+  "job_id": "uuid",
+  "tenant_id": "uuid",
+  "app_id": "string",
+  "definition": "{definition_name}",
+  "version": "x.y.z",
+  "inputs_hash": "sha256-hex",
+  "requested_at": "iso8601",
+  "payload": { /* inputs.schema.json (defaults applied) */ },
+  "priority": 100
+}
 ```
 
-> Stage 3 uses a **connection string** for SB (simplest). Later you can switch to **RBAC/Managed Identity**.
+Set properties/headers too:
+
+* `x-correlation-id`
+* optional: `session_id` (e.g., tenant), `attempt`
 
 ---
 
-## 4) Spin up **Rhino Compute** (temporary single VM)
+# 3.5 API changes (producer)
 
-From `kuduso/infra/live/dev/shared/rhino`:
+### 1) Validate + materialize defaults
 
-```bash
-export MY_IP=$(curl -s https://ifconfig.me)/32   # or hardcode your office / NAT IP
-terragrunt init
-terragrunt apply
+* Load `inputs.schema.json` and validate.
+* Apply defaults so **hashing & caching** are stable.
+
+```python
+normalized = json.dumps(inputs_with_defaults, sort_keys=True, separators=(",", ":"), ensure_ascii=False)
+inputs_hash = sha256((normalized + definition + version).encode()).hexdigest()
 ```
 
-**Outputs:**
+### 2) Insert job row
 
-* `public_ip` → build `COMPUTE_URL = http://<public_ip>:8081/`
-
-On the VM:
-
-* Install Windows updates, **Rhino 8**, and **Rhino.Compute**.
-* Set the **API key** (matches KV `COMPUTE-API-KEY`).
-* NSG already restricts ports `80/8081` to `MY_IP` (tighten as needed).
-
-> Later you’ll swap this module to **VMSS + ILB** with no app changes.
-
----
-
-## 5) Deploy **AppServer** (shared, internal)
-
-From `kuduso/infra/live/dev/shared/appserver`:
-
-```bash
-export IMG_SHA=$GIT_SHA
-export COMPUTE_URL="http://$(terragrunt -chdir=../rhino output -raw public_ip):8081/"
-terragrunt init
-terragrunt apply
+```sql
+insert into job (id, tenant_id, app_id, definition, version, status, inputs_hash, payload_json)
+values (:id, :tenant_id, :app_id, :def, :ver, 'queued', :hash, :payload_json);
 ```
 
-Inputs (in `terragrunt.hcl`) include:
+### 3) Enqueue message
 
-* `image = "<acr>/appserver-node:${IMG_SHA}"`
-* `contracts_dir = "/contracts"` (or your exact subpath)
-* `use_compute = false` (you can start `false` and toggle to `true` once smoke passes)
-* `compute_url = $COMPUTE_URL`
-* `compute_api_key_kv_secret_name = "COMPUTE-API-KEY"`
+Use the SB connection string for now (Stage 2 secrets). Put `x-correlation-id` into application properties.
 
-**What this does**
+### 4) Return `202 {job_id}`
 
-* Creates **aca-appserver** in the shared ACA env (internal ingress).
-* Grants ACR pull + Key Vault secret read.
-* Keeps AppServer **private**.
+* Status/Result endpoints now **read from DB** (not in-memory).
 
----
+### 5) Artifacts (SAS)
 
-## 6) Deploy **sitefit app** (API + Worker + Queue)
+Add a helper to mint **time-boxed SAS** for blobs (or user-delegation SAS w/ MI later). Store `kind,url,expires_at` in `outputs.artifacts` or `artifact` table.
 
-From `kuduso/infra/live/dev/apps/sitefit`:
+**Status endpoints**
 
-```bash
-export IMG_SHA=$GIT_SHA
-terragrunt init
-terragrunt apply
-```
+* `/jobs/status/{job_id}` → `{status, attempts, last_error?}`
+* `/jobs/result/{job_id}` → `result.outputs_json` (already matching `outputs.schema.json`)
 
-This:
+**Error taxonomy**
 
-* Creates **Service Bus queue** `jobs-sitefit` in the **shared namespace**.
-* Deploys **aca-sitefit-api** (external ingress) using image `<acr>/api-fastapi:$IMG_SHA`:
-
-  * Env: `SERVICEBUS_QUEUE`, `APP_SERVER_URL`, `JWT_JWKS_URL`, `RESULT_CACHE_TTL`
-  * Secrets (KV refs): `DATABASE_URL`, `SERVICEBUS_CONN`, `BLOB_SAS_SIGNING`
-* Deploys **aca-sitefit-worker** (internal) using `<acr>/worker-fastapi:$IMG_SHA`:
-
-  * KEDA scaler on `jobs-sitefit` length (`messageCount=5`)
-  * 1 job / replica; `min=0, max=3` (cap to Rhino seats)
-  * Lock renewal + timeout envs set from inputs
-
-**Output to note**
-
-* `api_fqdn` — the public host you’ll point the frontend to.
+* `400` schema invalid (inputs)
+* `401/403` auth
+* `409` idempotency collision (optional)
+* `429` rate limit
+* `5xx` infra issues (SB, DB)
 
 ---
 
-## 7) Frontend → API
+# 3.6 Worker changes (consumer)
 
-For now, set your Next.js `.env` (Vercel or local) to:
+**Loop**
 
-```
-NEXT_PUBLIC_API_BASE_URL=https://<api_fqdn>
-```
+1. Receive (peek-lock) **1 message**.
+2. `update job set status='running', attempts=attempts+1, started_at=now()`.
+3. Start a **lock renewal** task (every `LOCK_RENEW_SEC`).
+4. `POST` to AppServer mock endpoint:
 
-(You can add DNS later; ACA’s hostname is fine for dev.)
+   * URL: `APP_SERVER_URL.format(def, ver)`
+   * Headers: `x-correlation-id` from message props
+   * Body: `payload`
+5. On success:
 
----
+   * `insert into result(job_id, outputs_json, score)` (extract score if you have one)
+   * `update job set status='succeeded', ended_at=now(), last_error=null`
+   * `complete` the message
+6. On transient error (HTTP 429/502/timeout):
 
-## 8) Observability (already wired)
+   * `update job set status='failed', last_error=...` (optional intermediate status), **abandon** message (SB will redeliver)
+7. On poison/validation error:
 
-* Logs from all three ACA apps stream to **Log Analytics** created by **shared-core**.
-* Start with simple KQL queries:
+   * **dead-letter** with a structured reason → `last_error` with details
 
-  * `ContainerAppConsoleLogs_CL | where ContainerAppName_s == "aca-sitefit-worker" | sort by TimeGenerated desc`
-  * Track `x-correlation-id`, `job_id`, `definition@version`.
+**Guardrails**
 
----
-
-## 9) Smoke test (end-to-end)
-
-1. **POST** `https://<api_fqdn>/jobs/run` with your **contracts/.../examples/valid/minimal.json** wrapped in the envelope:
-
-   ```json
-   {
-     "app_id": "sitefit",
-     "definition": "sitefit",
-     "version": "1.0.0",
-     "inputs": { ... }
-   }
-   ```
-
-   Expect: `202 {"job_id": "<uuid>"}`
-
-2. **Worker scales up** from 0 to 1 (watch in Azure Portal/Logs).
-
-3. **GET** `/jobs/status/{job_id}` until `succeeded`.
-
-4. **GET** `/jobs/result/{job_id}`:
-
-   * Validates against `outputs.schema.json`.
-   * If artifact URLs present, they are **SAS** and download.
-
-5. **Retry path** (optional): set AppServer to return `429` once (env flag) → Worker abandons → SB retries → succeeds next attempt.
+* **One active job per replica** (process serially).
+* Respect **`JOB_TIMEOUT_SEC`**.
+* Keep **attempts** in DB aligned with SB **delivery count** for debugging.
 
 ---
 
-## 10) Security & guardrails (minimums for Stage 3)
+# 3.7 KEDA autoscale (already in Stage 2 infra)
 
-* **AppServer & Worker**: internal-only ingress (already).
-* **API**: CORS restricted to your Vercel domains; verify **Supabase JWT**.
-* **Rhino VM**: NSG inbound limited to your IP(s); **API key** required by AppServer.
-* **Secrets**: stored only in **Key Vault**; apps read via secret refs (no secrets in state or env files).
-* **Scale caps**: worker `max_replicas` ≤ Rhino license seats; AppServer enforces `manifest` limits before calling Rhino.
+Worker scales by `messageCount` on your queue:
 
----
-
-## 11) Rollback, releases, and image updates
-
-* All ACA apps use **revisions**. If a deploy misbehaves:
-
-  * Shift traffic back to the previous revision (Portal or CLI).
-* Release flow:
-
-  1. Build & push images (`$GIT_SHA`).
-  2. `export IMG_SHA=$GIT_SHA`
-  3. `terragrunt apply` in `shared/appserver` (if AppServer changed).
-  4. `terragrunt apply` in `apps/sitefit`.
+* `min_replicas = 0`, `max_replicas = N` (≤ Rhino seats when you flip to real compute).
+* Threshold: start with `5` messages/replica; tune later.
 
 ---
 
-## 12) Cost guardrails (dev)
+# 3.8 Observability (logs & metrics)
 
-* **Worker min=0**, max small.
-* **AppServer min=1** (or 0 if you’re okay with cold start).
-* **Log Analytics**: retention 30 days, daily cap if needed.
-* **Storage**: Standard LRS; add lifecycle rule later for artifacts.
+**Log these consistently (JSON lines are fine):**
 
----
+* `cid` (x-correlation-id)
+* `job_id`, `app_id`, `tenant_id`
+* `definition@version`
+* API: `event="enqueue"`, DB write timings, SB send duration
+* Worker: `event="claim"|"call_appserver"|"persist"|"complete"|"abandon"|"deadletter"`, latency buckets
+* AppServer: `event="solve.start|solve.done"`, validation errors
 
-## 13) Common pitfalls (avoid these)
+**Dashboards (Log Analytics)**
 
-* **Forgetting defaults**: API must **materialize defaults** from `inputs.schema.json` before hashing / enqueueing.
-* **Unbounded scale**: keep worker replicas capped and KEDA threshold sane (`messageCount=5–20`).
-* **Secret injection**: don’t inline secrets in Terragrunt inputs; always write to KV and reference by name.
-* **Direct AppServer exposure**: never give AppServer a public ingress; API/Worker call it internally only.
-
----
-
-## 14) Exit criteria for Stage 3
-
-* `terragrunt run-all apply` in `live/dev` brings up **shared core → rhino → appserver → sitefit** in order.
-* Frontend calls **public API** and completes a run that writes to DB and (optionally) Blob.
-* Logs show `x-correlation-id` end-to-end; queue depth & worker scaling visible.
-* You can purposely trigger a retry and see it complete.
+* SB queue length & DLQ depth
+* Worker replica count
+* Job p50/p95 runtime
+* AppServer latency + error codes
 
 ---
 
-When this passes, you’re ready for **Stage 4**: flip `use_compute=true` on AppServer (if you started false), verify the real GH graph, and you’ve got a truly cloud-backed MVP.
+# 3.9 Testing plan (must pass)
+
+**Happy path**
+
+1. `POST /jobs/run` with a valid example → `202 {job_id}`
+2. Worker scales (0→1), processes message
+3. `/jobs/status/{id}` → `succeeded` within seconds
+4. `/jobs/result/{id}` validates against `outputs.schema.json`
+5. Artifact SAS URL works (if any)
+
+**Retry path**
+
+* Flip AppServer to return `429` once (env flag).
+* Worker abandons → message redelivered → succeeds on next attempt.
+
+**Poison path**
+
+* Send invalid payload (passes API but fails in AppServer domain validation → `422`).
+* Worker **dead-letters**; `/jobs/status` shows `failed`; DLQ has message with reason.
+
+**Idempotency (optional now)**
+
+* Submit same inputs twice (same `inputs_hash`) → second `run` short-circuits to existing result or returns same `job_id`.
+
+---
+
+# 3.10 Rollout checklist
+
+* API container has **Key Vault** secret refs resolved (DB, SB, SAS key).
+* Worker has SB & DB connectivity; can resolve **AppServer internal FQDN**.
+* AppServer (mock) reachable from Worker; returns 200.
+* SB queue **max delivery count** set (e.g., 5); DLQ enabled.
+* Frontend configured with `NEXT_PUBLIC_API_BASE_URL` of API.
+
+---
+
+# 3.11 Security & tenancy (minimums right now)
+
+* API verifies **Supabase JWT** on `/jobs/run` and stamps `tenant_id`.
+* CORS limited to Vercel domains.
+* AppServer & Worker **internal-only** ingress.
+* No public exposure of Rhino (still offstage); mock compute only.
+* Secrets only in **Key Vault**.
+
+---
+
+# 3.12 What you don’t change yet
+
+* No real Rhino call—**keep `USE_COMPUTE=false`**.
+* No private networking to Rhino yet (that’s Stage 4/5 when you move to ILB/VMSS).
+* No fancy preview/realtime path—batch only.
+
+---
+
+## TL;DR
+
+Wire your code to **Supabase** + **Service Bus** you created in Stage 2: API enqueues + writes DB; Worker consumes + calls **mock AppServer** + persists result; artifacts use **Blob SAS**. Add solid logs with correlation IDs. When these tests pass, you have a cloud-backed pipeline ready to flip `USE_COMPUTE=true` in Stage 4 with zero API changes.

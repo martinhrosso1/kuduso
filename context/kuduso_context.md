@@ -47,6 +47,7 @@ kuduso/
       frontend/           # Next.js (Vercel)
       api-fastapi/        # external API (enqueue/status/result) + SB producer
       worker-fastapi/     # internal worker (SB consumer) + lock renewal
+      migrations/         # database migrations
   shared/
 	  appserver-node/     # internal-only (schemas, GH routing, glTF/GeoJSON packaging)
   infra/

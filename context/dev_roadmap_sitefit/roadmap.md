@@ -37,7 +37,7 @@ Awesome—here’s a pragmatic, step-by-step roadmap from “empty repo” to a 
 
 ---
 
- Stage 2 — **Cloud Infrastructure (OpenTofu/Terragrunt)** ✅ (new order)
+# Stage 2 — **Cloud Infrastructure (OpenTofu/Terragrunt)** ✅
 
 **Goal:** Stand up the **platform** and **per-app** cloud resources now (dev env). Keep compute mocked for the moment.
 
@@ -76,7 +76,7 @@ Awesome—here’s a pragmatic, step-by-step roadmap from “empty repo” to a 
 
 ---
 
-# Stage 3 — **Messaging & Persistence (cloud-backed, still mocked compute)** ✅ (new order)
+# Stage 3 — **Messaging & Persistence (cloud-backed, still mocked compute)** ✅
 
 **Goal:** Replace local/in-memory bits with **Service Bus + Supabase**, using the infra from Stage 2. Keep AppServer’s **mock** solver.
 
