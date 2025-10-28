@@ -2,14 +2,12 @@
 Kuduso API - External FastAPI service
 Handles job submission, status, and result retrieval
 
-Stage 1: In-memory storage with synchronous AppServer calls
-Stage 2+: Service Bus producer with database persistence
+Stage 3: Service Bus producer with Supabase database persistence
 """
 
 from fastapi import FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from typing import Optional
-import httpx
 import hashlib
 import json
 import uuid
@@ -17,6 +15,9 @@ import logging
 from datetime import datetime
 
 from models import RunEnvelope, JobStatusResponse, HealthResponse
+from database import db
+from queue import queue_producer
+from config import DATABASE_URL, SERVICEBUS_CONN, SERVICEBUS_QUEUE
 
 # Configure logging
 logging.basicConfig(
@@ -25,18 +26,11 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Configuration
-APP_SERVER_URL = "http://localhost:8080/gh/{definition}:{version}/solve"
-TIMEOUT_SECONDS = 10.0
-
-# In-memory job storage (Stage 1 only)
-jobs: dict[str, dict] = {}
-
 # FastAPI app
 app = FastAPI(
     title="Kuduso API",
     description="External API for job submission and result retrieval",
-    version="0.1.0"
+    version="0.3.0-stage3"
 )
 
 # CORS middleware
@@ -46,8 +40,9 @@ app.add_middleware(
         "http://localhost:3000",
         "http://localhost:3001", 
         "http://localhost:3002",
-        "http://localhost:3003"
-    ],  # Frontend origin (supports multiple ports for dev)
+        "http://localhost:3003",
+        "https://*.vercel.app"
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -64,11 +59,20 @@ def compute_inputs_hash(payload: dict, definition: str, version: str) -> str:
 @app.get("/health", response_model=HealthResponse)
 async def health_check():
     """Health check endpoint"""
+    # Test database connection
+    try:
+        conn = db.get_connection()
+        conn.close()
+        db_status = "connected"
+    except Exception as e:
+        logger.error(f"Database health check failed: {e}")
+        db_status = "disconnected"
+    
     return {
-        "status": "ok",
-        "service": "api-fastapi",
-        "storage": "in-memory",
-        "jobs_count": len(jobs)
+        "status": "ok" if db_status == "connected" else "degraded",
+        "service": "api-fastapi-stage3",
+        "storage": f"supabase-{db_status}",
+        "jobs_count": 0  # Could query actual count if needed
     }
 
 
@@ -80,8 +84,7 @@ async def run_job(
     """
     Submit a job for execution
     
-    Stage 1: Synchronously calls AppServer
-    Stage 2+: Will enqueue to Service Bus
+    Stage 3: Enqueues to Service Bus, writes to database
     """
     cid = x_correlation_id or str(uuid.uuid4())
     job_id = str(uuid.uuid4())
@@ -95,144 +98,136 @@ async def run_job(
         "version": envelope.version
     }))
 
+    # TODO: Validate inputs against contract schema
+    # TODO: Materialize defaults from schema
+    
     # Compute inputs hash for idempotency
     inputs_hash = compute_inputs_hash(envelope.inputs, envelope.definition, envelope.version)
     
-    # Initialize job
-    jobs[job_id] = {
-        "status": "running",
-        "app_id": envelope.app_id,
-        "definition": envelope.definition,
-        "version": envelope.version,
-        "inputs_hash": inputs_hash,
-        "correlation_id": cid,
-        "created_at": datetime.utcnow().isoformat(),
-        "started_at": datetime.utcnow().isoformat()
-    }
-
-    # Synchronous call to AppServer (Stage 1 only)
-    url = APP_SERVER_URL.format(definition=envelope.definition, version=envelope.version)
-    headers = {"x-correlation-id": cid}
-
-    try:
-        async with httpx.AsyncClient(timeout=TIMEOUT_SECONDS) as client:
-            logger.debug(json.dumps({
-                "event": "appserver.call",
-                "job_id": job_id,
-                "correlation_id": cid,
-                "url": url
-            }))
-            
-            resp = await client.post(url, json=envelope.inputs, headers=headers)
-            
-        if resp.status_code != 200:
-            error_detail = resp.json() if resp.headers.get("content-type") == "application/json" else resp.text
-            jobs[job_id].update({
-                "status": "failed",
-                "error": error_detail,
-                "ended_at": datetime.utcnow().isoformat()
-            })
-            
-            logger.error(json.dumps({
-                "event": "job.failed",
-                "job_id": job_id,
-                "correlation_id": cid,
-                "status_code": resp.status_code,
-                "error": str(error_detail)
-            }))
-            
-            raise HTTPException(status_code=resp.status_code, detail=error_detail)
-        
-        result = resp.json()
-        jobs[job_id].update({
+    # Check for duplicate (optional idempotency)
+    existing = db.check_duplicate_by_hash(inputs_hash)
+    if existing and existing['status'] == 'succeeded':
+        logger.info(json.dumps({
+            "event": "job.duplicate",
+            "job_id": job_id,
+            "existing_job_id": existing['job_id'],
+            "correlation_id": cid
+        }))
+        return {
+            "job_id": existing['job_id'],
             "status": "succeeded",
-            "result": result,
-            "ended_at": datetime.utcnow().isoformat()
-        })
+            "correlation_id": cid,
+            "cached": True
+        }
+    
+    try:
+        # Insert job into database
+        db.insert_job(
+            job_id=job_id,
+            tenant_id=None,  # TODO: Extract from JWT when auth is implemented
+            app_id=envelope.app_id,
+            definition=envelope.definition,
+            version=envelope.version,
+            inputs_hash=inputs_hash,
+            payload_json=envelope.inputs
+        )
+        
+        # Enqueue to Service Bus
+        queue_producer.enqueue_job(
+            job_id=job_id,
+            tenant_id=None,
+            app_id=envelope.app_id,
+            definition=envelope.definition,
+            version=envelope.version,
+            inputs_hash=inputs_hash,
+            payload=envelope.inputs,
+            correlation_id=cid,
+            priority=100
+        )
         
         logger.info(json.dumps({
-            "event": "job.succeeded",
+            "event": "job.enqueued",
             "job_id": job_id,
-            "correlation_id": cid,
-            "results_count": len(result.get("results", []))
+            "correlation_id": cid
         }))
         
         return {
             "job_id": job_id,
-            "status": "succeeded",
+            "status": "queued",
             "correlation_id": cid
         }
         
-    except httpx.RequestError as e:
-        jobs[job_id].update({
-            "status": "failed",
-            "error": f"AppServer unreachable: {str(e)}",
-            "ended_at": datetime.utcnow().isoformat()
-        })
-        
+    except Exception as e:
         logger.error(json.dumps({
-            "event": "job.failed",
+            "event": "job.submit_failed",
             "job_id": job_id,
             "correlation_id": cid,
-            "error": "AppServer unreachable",
-            "details": str(e)
+            "error": str(e)
         }))
-        
-        raise HTTPException(status_code=504, detail="AppServer unreachable")
+        raise HTTPException(status_code=500, detail=f"Failed to submit job: {str(e)}")
 
 
 @app.get("/jobs/status/{job_id}", response_model=JobStatusResponse)
 async def get_job_status(job_id: str):
-    """Get job status"""
-    job = jobs.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    
-    return {
-        "job_id": job_id,
-        "status": job["status"],
-        "has_result": "result" in job,
-        "created_at": job.get("created_at"),
-        "correlation_id": job.get("correlation_id")
-    }
+    """Get job status from database"""
+    try:
+        job = db.get_job_status(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        
+        return {
+            "job_id": job['job_id'],
+            "status": job['status'],
+            "has_result": job['status'] == 'succeeded',
+            "created_at": job.get('created_at').isoformat() if job.get('created_at') else None,
+            "correlation_id": None  # TODO: Store correlation_id in job table
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get job status: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get job status")
 
 
 @app.get("/jobs/result/{job_id}")
 async def get_job_result(job_id: str):
-    """Get job result"""
-    job = jobs.get(job_id)
-    if not job:
-        raise HTTPException(status_code=404, detail="Job not found")
-    
-    if job["status"] != "succeeded":
-        raise HTTPException(
-            status_code=409,
-            detail=f"Job not ready. Status: {job['status']}"
-        )
-    
-    if "result" not in job:
-        raise HTTPException(status_code=404, detail="Result not found")
-    
-    return job["result"]
+    """Get job result from database"""
+    try:
+        job = db.get_job_result(job_id)
+        if not job:
+            raise HTTPException(status_code=404, detail="Job not found")
+        
+        if job['status'] != 'succeeded':
+            raise HTTPException(
+                status_code=409,
+                detail=f"Job not ready. Status: {job['status']}"
+            )
+        
+        if not job.get('outputs_json'):
+            raise HTTPException(status_code=404, detail="Result not found")
+        
+        return job['outputs_json']
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to get job result: {e}")
+        raise HTTPException(status_code=500, detail="Failed to get job result")
 
 
-@app.get("/jobs")
-async def list_jobs():
-    """List all jobs (debug endpoint for Stage 1)"""
+@app.get("/")
+async def root():
+    """Root endpoint"""
     return {
-        "jobs": [
-            {
-                "job_id": job_id,
-                "status": job["status"],
-                "definition": job.get("definition"),
-                "created_at": job.get("created_at")
-            }
-            for job_id, job in jobs.items()
-        ],
-        "total": len(jobs)
+        "service": "kuduso-api",
+        "stage": "3-messaging-persistence",
+        "version": "0.3.0",
+        "database": "supabase" if DATABASE_URL else "not_configured",
+        "queue": SERVICEBUS_QUEUE if SERVICEBUS_CONN else "not_configured"
     }
 
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8081)
+    uvicorn.run(app, host="0.0.0.0", port=8000)
