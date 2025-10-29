@@ -1,6 +1,7 @@
 """Database operations using psycopg2"""
 import psycopg2
 import psycopg2.extras
+import psycopg2.extensions
 import json
 from typing import Optional, Dict, Any
 from datetime import datetime
@@ -10,6 +11,9 @@ import logging
 from config import DATABASE_URL
 
 logger = logging.getLogger(__name__)
+
+# Register UUID adapter for psycopg2
+psycopg2.extras.register_uuid()
 
 
 class Database:
