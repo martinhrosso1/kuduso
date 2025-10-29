@@ -16,7 +16,7 @@ from datetime import datetime
 
 from models import RunEnvelope, JobStatusResponse, HealthResponse
 from database import db
-from queue import queue_producer
+from job_queue import queue_producer
 from config import DATABASE_URL, SERVICEBUS_CONN, SERVICEBUS_QUEUE
 
 # Configure logging
