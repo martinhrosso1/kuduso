@@ -214,7 +214,8 @@ class JobProcessor:
             "correlation_id": correlation_id
         }))
         
-        with httpx.Client(timeout=JOB_TIMEOUT_SEC) as client:
+        # Use verify=False for internal HTTPS communication (Container Apps internal certs)
+        with httpx.Client(timeout=JOB_TIMEOUT_SEC, verify=False) as client:
             response = client.post(url, json=payload, headers=headers)
             response.raise_for_status()
             return response.json()
