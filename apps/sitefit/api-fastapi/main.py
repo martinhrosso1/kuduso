@@ -76,6 +76,12 @@ async def health_check():
     }
 
 
+@app.get("/ready")
+async def readiness_check():
+    """Readiness check for Container Apps"""
+    return {"status": "ready"}
+
+
 @app.post("/jobs/run")
 async def run_job(
     envelope: RunEnvelope,
