@@ -45,11 +45,11 @@ inputs = {
   key_vault_id  = dependency.core.outputs.key_vault_id
   key_vault_uri = dependency.core.outputs.key_vault_uri
   
-  # AppServer URL (internal)
-  appserver_url = "http://kuduso-dev-appserver:8080"
+  # AppServer URL (internal) - using internal FQDN with standard HTTP port
+  appserver_url = "http://kuduso-dev-appserver.internal.blackwave-77d88b66.westeurope.azurecontainerapps.io:80/gh/{definition}:{version}/solve"
   
   # API Configuration
-  api_image        = "api-fastapi:f75482e"
+  api_image        = "api-fastapi:4be8016"
   api_cpu          = "0.5"
   api_memory       = "1Gi"
   api_min_replicas = 1
@@ -57,7 +57,7 @@ inputs = {
   api_port         = 8000
   
   # Worker Configuration
-  worker_image        = "worker-fastapi:f75482e"
+  worker_image        = "worker-fastapi:8fbd6d4"
   worker_cpu          = "0.5"
   worker_memory       = "1Gi"
   worker_min_replicas = 0  # Scale to zero when no messages

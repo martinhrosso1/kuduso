@@ -37,7 +37,7 @@ inputs = {
   container_registry_server = dependency.core.outputs.acr_server
   
   # Image
-  app_image = "appserver-node:f75482e" # Use the image we built
+  app_image = "appserver-node:6282cdd" # With /ready endpoint and contracts included
   
   # Key Vault
   key_vault_id  = dependency.core.outputs.key_vault_id

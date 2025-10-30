@@ -53,8 +53,9 @@ resource "azurerm_container_app" "appserver" {
   }
   
   ingress {
-    external_enabled = var.enable_ingress
-    target_port      = var.target_port
+    external_enabled           = var.enable_ingress
+    target_port                = var.target_port
+    allow_insecure_connections = true  # Allow HTTP for internal communication
     
     traffic_weight {
       percentage      = 100
@@ -85,6 +86,11 @@ resource "azurerm_container_app" "appserver" {
       env {
         name  = "COMPUTE_URL"
         value = var.rhino_compute_url
+      }
+      
+      env {
+        name  = "CONTRACTS_DIR"
+        value = "/app/contracts"
       }
       
       # Database connection string from Key Vault
