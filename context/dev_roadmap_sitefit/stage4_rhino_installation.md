@@ -1,152 +1,492 @@
+# Stage 4 — Rhino.Compute Setup (Infrastructure Already Exists)
 
-Guide to get **Rhino.Compute** running on your Azure Windows VM and wired to your AppServer.
+## Objectives
 
----
+* Install & license **Rhino 8** on Windows VM
+* Configure **Rhino.Compute** server
+* Connect **AppServer** to real Compute
+* Test Grasshopper execution
 
-# 1) VM prerequisites (once)
-
-1. **Image & size**
-
-   * Windows Server 2022 (Datacenter) on a D2as_v5 or D4as_v5 is a good start.
-   * Make sure you can RDP into it and you’ve locked inbound NSG to **your IP only** for now.
-
-2. **Install Rhino 8 (Windows)**
-
-   * Sign in with the Rhino account that owns the license (Cloud Zoo). Rhino 8 is required for current Compute builds. ([GitHub][1])
-
-3. **Install the Compute server**
-
-   * Follow McNeel’s Compute “Getting Started / Deploy to IIS” guides; you can run it **as an IIS site** (recommended for production) or **self-hosted Kestrel** for quick tests. ([www.rhino3d.com][2])
-
-4. **.NET + IIS features**
-
-   * Ensure the **.NET Desktop Runtime** and **IIS** role (with ASP.NET Core hosting bundle) are installed if you plan to host under IIS. The McNeel “Deploy to IIS” guide walks this. ([www.rhino3d.com][3])
+**Success criteria:** AppServer executes real GH definitions via Rhino.Compute
 
 ---
 
-# 2) Two supported run modes
-
-## A) Quick start (self-hosted / Kestrel)
-
-Good for verifying the box before you touch IIS.
-
-* Launch the **compute.rhino3d** server (from the official repo/build) and let it listen on `http://localhost:8081/`.
-* Set the **API key** as a Windows **system environment variable**:
-
-  * Name: `RHINO_COMPUTE_KEY`
-  * Value: a long random string (you’ll send it as a header later).
-  * Restart the Compute service/exe after setting it. ([McNeel Forum][4])
-* Open the VM’s firewall/NSG to **port 8081** from **your IP only** (test phase).
-
-## B) Production-ish (IIS reverse-proxy)
-
-Recommended for steady uptime & autos-restart.
-
-* Install **IIS** and the **ASP.NET Core Hosting Bundle**.
-* Create a new **IIS site** (e.g., bind to port **80** internally).
-* Configure the site to start the **Compute** backend and forward requests to the geometry worker. McNeel’s “Deploy to IIS” guide covers the steps and app pool details. ([www.rhino3d.com][3])
-* Set `RHINO_COMPUTE_KEY` in **System Properties → Environment Variables** (not just user-level). ([McNeel Forum][4])
-* Optional but recommended: configure **HTTPS** on the IIS site (Compute supports HTTPS; McNeel has a dedicated guide). ([www.rhino3d.com][5])
-
-> Tip: IIS will “cold start” after long idle periods; you can add an IIS **Application Initialization** warm-up, or have your AppServer ping `/version` every few minutes. Azure users have reported 20–30s warmups without it. ([McNeel Forum][6])
+**Note:** The `infra/modules/rhino-vm/` module was created in Stage 2. This guide focuses on:
+1. Deploying the VM
+2. Software installation (Rhino + Compute)
+3. Configuration & testing
 
 ---
 
-# 3) Network & security checklist
+# 4.1 Deploy Rhino VM (Quick Step)
 
-* **During testing**: allow inbound 80/8081 **from your current IP only**.
-* **For production**: make **no public IP** and front Compute with an **Internal Load Balancer**; only your **AppServer** subnet/IPs can reach it (what we planned for your architecture).
-* **Auth header**: clients must send `RhinoComputeKey: <your key>` on **POST** requests (401 otherwise). Key value must match `RHINO_COMPUTE_KEY` on the VM. ([McNeel Forum][7])
 
----
+## Step 3: Get VM Public IP
 
-# 4) Configure Rhino/Grasshopper plugins
-
-* Ensure any GH plugins used by your definitions are installed on the VM and match versions you list in your **`plugins.json`** (your AppServer does plugin attestation).
-* Keep a **golden image** or automation script for repeatable plugin installs when you later move to VM Scale Sets.
-
----
-
-# 5) Sanity tests (from your laptop)
-
-Replace `VM_IP` with the VM’s public IP (test phase) or private ILB IP (prod).
-
-1. Server up?
-
-   ```bash
-   curl http://VM_IP:8081/version
-   ```
-
-   You should get a small JSON/version response (no key needed for GET endpoints like `/version` or `/activechildren`). ([McNeel Forum][4])
-
-2. Auth check (POST requires key):
-
-   ```bash
-   curl -i -X POST http://VM_IP:8081/rhino/geometry/points \
-     -H "Content-Type: application/json" \
-     -H "RhinoComputeKey: <YOUR_KEY>" \
-     -d '{"points":[[0,0,0],[1,0,0]]}'
-   ```
-
-   (Any valid Compute POST endpoint works; the key name **must** be `RhinoComputeKey`.) ([McNeel Forum][7])
-
-3. Grasshopper endpoint smoke (tiny test)
-   Send a minimal `/grasshopper` payload with a trivial GH file to confirm end-to-end GH execution (follow McNeel’s “Running & Debugging Compute Locally” guide for example payloads; point `algo` to your GHX). ([www.rhino3d.com][8])
-
----
-
-# 6) Wire to your AppServer (what to set)
-
-In your **AppServer (Node)** container env:
-
-* `COMPUTE_URL` → `http://VM_IP:8081/` (test) or the **ILB** URL later.
-* `COMPUTE_API_KEY` → same value as `RHINO_COMPUTE_KEY`.
-* Timeouts: start with 240s; enforce caps from your `manifest.json`.
-
-Your AppServer will send:
-
-```
-POST /grasshopper
-Headers:
-  RhinoComputeKey: <COMPUTE_API_KEY>
-Body:
-  { "algo":".../sitefit.ghx", "pointer":true, "values":[...] }
+```bash
+VM_IP=$(terragrunt output -raw public_ip)
+echo "Rhino VM IP: $VM_IP"
 ```
 
 ---
 
-# 7) Common snags (and fixes)
+# 4.2 Install Rhino 8 (Manual - RDP Required)
 
-* **401 Unauthorized**: missing/incorrect header name—use `RhinoComputeKey` exactly; value must equal VM’s `RHINO_COMPUTE_KEY`. ([McNeel Forum][7])
-* **Cold starts feel slow**: add IIS warm-up pings or keep-alive from AppServer. ([McNeel Forum][6])
-* **Version mismatch (Rhino 7 vs 8)**: run the **Compute branch** that matches your installed Rhino (7.x vs 8.x). ([www.rhino3d.com][8])
-* **Not reachable from outside**: check NSG/Windows Firewall + that the site binds to the right port, and you’re using the exposed port (80/8081). A past Azure thread flags this exact gotcha. ([McNeel Forum][9])
+## Step 1: RDP to VM
+
+**Windows:**
+```cmd
+mstsc /v:%VM_IP%
+```
+
+**Mac:**
+```bash
+open rdp://$VM_IP
+```
+
+**Linux:**
+```bash
+rdesktop $VM_IP
+# or
+xfreerdp /u:azureuser /v:$VM_IP
+```
+
+**Credentials:**
+- Username: `azureuser`
+- Password: (from terragrunt.hcl)
 
 ---
 
-# 8) When you’re happy (hardening next)
+## Step 2: Download & Install Rhino 8
 
-* Move the VM into your **VNet** and put Compute **behind an Internal Load Balancer**.
-* Restrict inbound to the **AppServer subnet** only.
-* Consider a **VMSS** with your golden Rhino+plugins image for scale and rolling updates (this is your Stage-5/6 target).
+**On the VM (via RDP):**
+
+### Option A: Interactive Install
+
+1. Open browser and go to: https://www.rhino3d.com/download/
+2. Download **Rhino 8 for Windows**
+3. Run installer
+4. Choose **Cloud Zoo** licensing
+5. Sign in with McNeel account
+6. Complete installation (~10 minutes)
+
+### Option B: Silent Install (PowerShell)
+
+```powershell
+# Download Rhino 8 installer
+$installerUrl = "https://www.rhino3d.com/download/rhino-for-windows/8/latest/direct"
+$installerPath = "$env:TEMP\rhino_8_setup.exe"
+
+Invoke-WebRequest -Uri $installerUrl -OutFile $installerPath
+
+# Silent install with Cloud Zoo
+Start-Process $installerPath -ArgumentList @(
+  '/quiet',
+  '/norestart',
+  'LICENSE_METHOD=CLOUD_ZOO'
+) -Wait
+
+# Verify installation
+Test-Path "C:\Program Files\Rhino 8\System\Rhino.exe"
+```
+
+### Step 3: Activate License
+
+If using **Cloud Zoo** (recommended):
+1. Launch Rhino 8
+2. When prompted, choose **Cloud Zoo**
+3. Sign in to your McNeel account
+4. Select your license from the list
+
+If using **LAN Zoo**:
+```powershell
+# Point to LAN Zoo server
+reg add "HKLM\SOFTWARE\McNeel\Rhinoceros\8.0\License Manager" `
+  /v "Server" /t REG_SZ /d "zoo.yourcompany.com" /f
+```
+
+### Step 4: Verify License
+
+```powershell
+# Check license status
+& "C:\Program Files\Rhino 8\System\Rhino.exe" /runscript="_-Exit"
+```
 
 ---
 
-## Handy docs
+# 4.3 Install & Configure Rhino.Compute
 
-* **Compute Guides (McNeel)**: overview, dev, deploy, HTTPS. ([www.rhino3d.com][2])
-* **Azure VM how-to (McNeel)**: creating the VM (basic). ([www.rhino3d.com][10])
-* **API key & header name**: env var `RHINO_COMPUTE_KEY`; header `RhinoComputeKey`. ([McNeel Forum][4])
+## Step 1: Install Prerequisites
 
-If you want, I can give you an **IIS app settings checklist** (bindings, app pool, warm-up) tailored to your VM once you share the exact Windows build and whether you prefer port 80 or 8081.
+**On the VM:**
 
-[1]: https://github.com/mcneel/compute.rhino3d?utm_source=chatgpt.com "mcneel/compute.rhino3d: REST geometry server based ..."
-[2]: https://developer.rhino3d.com/guides/compute/?utm_source=chatgpt.com "Rhino - Compute Guides"
-[3]: https://developer.rhino3d.com/guides/compute/deploy-to-iis/?utm_source=chatgpt.com "Rhino - Deployment to Production Servers"
-[4]: https://discourse.mcneel.com/t/change-api-key-after-deploying-compute/136966?utm_source=chatgpt.com "Change API Key after deploying compute - McNeel Forum"
-[5]: https://developer.rhino3d.com/guides/compute/configure-compute-for-https/?utm_source=chatgpt.com "Configure Compute to use HTTPS"
-[6]: https://discourse.mcneel.com/t/best-way-to-fire-up-rhino-compute-on-azure/187892?utm_source=chatgpt.com "Best way to fire up rhino compute on Azure - McNeel Forum"
-[7]: https://discourse.mcneel.com/t/calling-compute-endpoints-giving-error/164698?utm_source=chatgpt.com "Calling compute endpoints giving error - McNeel Forum"
-[8]: https://developer.rhino3d.com/guides/compute/development/?utm_source=chatgpt.com "Running and Debugging Compute Locally"
-[9]: https://discourse.mcneel.com/t/rhino-compute-not-starting-on-azure-vm/142479?utm_source=chatgpt.com "Rhino Compute not starting on Azure VM - McNeel Forum"
-[10]: https://developer.rhino3d.com/guides/compute/creating-an-Azure-VM?utm_source=chatgpt.com "How to create a virtual machine (VM) on Azure"
+```powershell
+# Install Chocolatey (package manager)
+Set-ExecutionPolicy Bypass -Scope Process -Force
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor 3072
+iex ((New-Object System.Net.WebClient).DownloadString('https://community.chocolatey.org/install.ps1'))
+
+# Install .NET SDK and runtimes
+choco install dotnet-8.0-sdk dotnet-8.0-runtime dotnet-8.0-desktopruntime -y
+choco install dotnet-aspnethosting-bundle -y
+
+# Restart PowerShell to update PATH
+```
+
+---
+
+## Step 2: Download Rhino.Compute
+
+```powershell
+# Create directory
+New-Item -Path "C:\rhino-compute" -ItemType Directory -Force
+
+# Download latest release
+$computeUrl = "https://github.com/mcneel/compute.rhino3d/releases/latest/download/rhino.compute.zip"
+$computeZip = "C:\rhino-compute\rhino.compute.zip"
+
+Invoke-WebRequest -Uri $computeUrl -OutFile $computeZip
+
+# Extract
+Expand-Archive -Path $computeZip -DestinationPath "C:\rhino-compute" -Force
+
+# Verify
+Test-Path "C:\rhino-compute\compute.geometry.exe"
+```
+
+---
+
+## Step 3: Generate & Set API Key
+
+```powershell
+# Generate secure API key
+$apiKey = -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 32 | ForEach-Object {[char]$_})
+Write-Host "Generated API Key: $apiKey"
+Write-Host "SAVE THIS KEY - You'll need it for Azure Key Vault"
+
+# Set as system environment variable
+[System.Environment]::SetEnvironmentVariable('RHINO_COMPUTE_KEY', $apiKey, 'Machine')
+
+# Verify
+[System.Environment]::GetEnvironmentVariable('RHINO_COMPUTE_KEY', 'Machine')
+```
+
+**Important:** Copy this API key and store it in Azure Key Vault:
+
+```bash
+# On your local machine
+az keyvault secret set \
+  --vault-name kuduso-dev-kv-93d2ab \
+  --name RHINO-COMPUTE-KEY \
+  --value "YOUR_GENERATED_KEY"
+```
+
+---
+
+## Step 4: Test Self-Hosted Compute (Quick Test)
+
+**On VM:**
+
+```powershell
+cd C:\rhino-compute
+
+# Start Compute server
+.\compute.geometry.exe
+
+# Server should start on http://localhost:8081
+# Press Ctrl+C to stop when done testing
+```
+
+**From another PowerShell window on VM:**
+
+```powershell
+# Test health endpoint (no auth required)
+curl http://localhost:8081/version
+
+# Test with auth
+$apiKey = [System.Environment]::GetEnvironmentVariable('RHINO_COMPUTE_KEY', 'Machine')
+curl -Method POST http://localhost:8081/rhino/geometry/point `
+  -Headers @{"RhinoComputeKey"=$apiKey; "Content-Type"="application/json"} `
+  -Body '{"x":0,"y":0,"z":0}'
+```
+
+If both tests pass, Compute is working! ✅
+
+---
+
+## Step 5: Configure as Windows Service (Production Setup)
+
+**Install NSSM (Non-Sucking Service Manager):**
+
+```powershell
+choco install nssm -y
+
+# Create Windows Service
+nssm install RhinoCompute "C:\rhino-compute\compute.geometry.exe"
+nssm set RhinoCompute AppDirectory "C:\rhino-compute"
+nssm set RhinoCompute DisplayName "Rhino.Compute Server"
+nssm set RhinoCompute Description "Rhino geometry computation service"
+nssm set RhinoCompute Start SERVICE_AUTO_START
+
+# Set environment variable for service
+nssm set RhinoCompute AppEnvironmentExtra "RHINO_COMPUTE_KEY=$([System.Environment]::GetEnvironmentVariable('RHINO_COMPUTE_KEY', 'Machine'))"
+
+# Start service
+nssm start RhinoCompute
+
+# Verify service is running
+nssm status RhinoCompute
+```
+
+---
+
+## Step 6: Configure Windows Firewall
+
+```powershell
+# Allow inbound on port 8081
+New-NetFirewallRule -DisplayName "Rhino.Compute" `
+  -Direction Inbound `
+  -Protocol TCP `
+  -LocalPort 8081 `
+  -Action Allow `
+  -Profile Any
+```
+
+---
+
+## Step 7: Test from Your Local Machine
+
+```bash
+# Get VM IP
+VM_IP=$(cd infra/live/dev/shared/rhino && terragrunt output -raw public_ip)
+
+# Get API key from Key Vault
+API_KEY=$(az keyvault secret show \
+  --vault-name kuduso-dev-kv-93d2ab \
+  --name RHINO-COMPUTE-KEY \
+  --query value -o tsv)
+
+# Test health
+curl http://$VM_IP:8081/version
+
+# Test auth
+curl -X POST http://$VM_IP:8081/rhino/geometry/point \
+  -H "RhinoComputeKey: $API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"x":10,"y":20,"z":30}'
+```
+
+**Expected:** `200 OK` with point geometry data ✅
+
+---
+
+# 4.4 Create Grasshopper Definition Directory
+
+**On VM:**
+
+```powershell
+# Create versioned directories for GH definitions
+New-Item -Path "C:\compute\sitefit\1.0.0" -ItemType Directory -Force
+
+# This is where you'll place sitefit.ghx
+```
+
+**File structure:**
+```
+C:\compute\
+└── sitefit\
+    └── 1.0.0\
+        ├── sitefit.ghx        (main definition)
+        ├── inputs.json        (sample inputs for testing)
+        └── README.md          (definition docs)
+```
+
+**Note:** You'll create the actual Grasshopper definition in the next stage. For now, create a placeholder:
+
+```powershell
+@"
+This directory will contain the Grasshopper definition for sitefit v1.0.0
+
+Required files:
+- sitefit.ghx: Main Grasshopper definition
+- inputs.json: Sample test inputs
+
+The definition should match the contract in:
+/home/martin/Desktop/kuduso/contracts/sitefit/1.0.0/
+"@ | Out-File "C:\compute\sitefit\1.0.0\README.md"
+```
+
+---
+
+# 4.5 Wire AppServer to Rhino.Compute
+
+Now that Compute is running, update AppServer to use it:
+
+## Step 1: Update AppServer Terragrunt Config
+
+**File:** `infra/live/dev/shared/appserver/terragrunt.hcl`
+
+```hcl
+dependency "rhino" {
+  config_path = "../rhino"
+  mock_outputs = {
+    public_ip = "0.0.0.0"
+  }
+}
+
+inputs = {
+  # ...existing config...
+  
+  # Rhino.Compute Configuration
+  rhino_compute_url = "http://${dependency.rhino.outputs.public_ip}:8081"
+  use_compute       = false  # Keep as false until we have a real GH definition
+}
+```
+
+## Step 2: Update AppServer Module (if needed)
+
+The `shared-appserver` module should already have these environment variables. Verify in `infra/modules/shared-appserver/main.tf`:
+
+```hcl
+env {
+  name  = "USE_COMPUTE"
+  value = tostring(var.use_compute)
+}
+
+env {
+  name  = "COMPUTE_URL"
+  value = var.rhino_compute_url
+}
+
+env {
+  name        = "COMPUTE_API_KEY"
+  secret_name = var.rhino_api_key_secret_name
+}
+```
+
+## Step 3: Redeploy AppServer (Optional - only if config changed)
+
+```bash
+cd infra/live/dev/shared/appserver
+terragrunt apply
+```
+
+---
+
+# 4.6 Quick Validation Checklist
+
+Run through this checklist to verify everything is working:
+
+- [ ] **VM deployed:** `az vm show --resource-group kuduso-dev-rg --name kuduso-dev-rhino-vm`
+- [ ] **Can RDP:** Connect via Remote Desktop
+- [ ] **Rhino 8 installed:** `Test-Path "C:\Program Files\Rhino 8\System\Rhino.exe"`
+- [ ] **License active:** Launch Rhino, check Tools → Options → Licenses
+- [ ] **Compute running:** Service status `nssm status RhinoCompute` = `SERVICE_RUNNING`
+- [ ] **API key set:** `[Environment]::GetEnvironmentVariable('RHINO_COMPUTE_KEY', 'Machine')`
+- [ ] **Firewall open:** `Get-NetFirewallRule -DisplayName "Rhino.Compute"`
+- [ ] **Health check works:** `curl http://$VM_IP:8081/version`
+- [ ] **Auth works:** POST with `RhinoComputeKey` header returns 200
+- [ ] **API key in Key Vault:** `az keyvault secret show --vault-name kuduso-dev-kv-93d2ab --name RHINO-COMPUTE-KEY`
+- [ ] **GH directory exists:** `Test-Path "C:\compute\sitefit\1.0.0"`
+
+---
+
+# 4.7 Common Issues & Fixes
+
+## Issue: Can't RDP to VM
+
+**Check NSG allows your IP:**
+```bash
+curl ifconfig.me  # Get your current IP
+# Update terragrunt.hcl with: allowed_source_ip = "YOUR_IP/32"
+# Redeploy: terragrunt apply
+```
+
+---
+
+## Issue: 401 Unauthorized from Compute
+
+**Cause:** API key mismatch
+
+**Fix:**
+```powershell
+# On VM - check environment variable
+[Environment]::GetEnvironmentVariable('RHINO_COMPUTE_KEY', 'Machine')
+
+# Compare with Key Vault
+az keyvault secret show --vault-name kuduso-dev-kv-93d2ab --name RHINO-COMPUTE-KEY --query value
+
+# If different, update Key Vault with VM's value
+```
+
+---
+
+## Issue: Service won't start
+
+**Check logs:**
+```powershell
+# View service logs
+Get-EventLog -LogName Application -Source "RhinoCompute" -Newest 20
+
+# Check if port 8081 is already in use
+netstat -ano | findstr :8081
+
+# Restart service
+nssm restart RhinoCompute
+```
+
+---
+
+## Issue: Rhino license not found
+
+**Fix:**
+```powershell
+# Launch Rhino GUI and complete sign-in
+& "C:\Program Files\Rhino 8\System\Rhino.exe"
+
+# Verify license is active
+# Tools → Options → Licenses → Cloud Zoo
+```
+
+---
+
+# 4.8 Next Steps
+
+✅ **Stage 4 Complete** when:
+- Rhino VM is running
+- Rhino 8 installed & licensed
+- Rhino.Compute responding to health checks
+- API key stored in Key Vault
+
+🚀 **Stage 5:** Create real Grasshopper definition (`sitefit.ghx`) that matches your contracts
+
+---
+
+# 4.9 Cost Management
+
+**VM Running Costs:** ~$120/month for D4as_v5
+
+**Save money:**
+```bash
+# Stop VM when not in use
+az vm deallocate --resource-group kuduso-dev-rg --name kuduso-dev-rhino-vm
+
+# Start when needed
+az vm start --resource-group kuduso-dev-rg --name kuduso-dev-rhino-vm
+
+# Auto-shutdown is already configured (7 PM UTC)
+```
+
+---
+
+# 4.10 References
+
+- **Rhino.Compute GitHub:** https://github.com/mcneel/compute.rhino3d
+- **Compute Guides:** https://developer.rhino3d.com/guides/compute/
+- **McNeel Forum:** https://discourse.mcneel.com
+- **Silent Install:** https://wiki.mcneel.com/rhino/installingrhino
+- **NSSM Documentation:** https://nssm.cc/usage
+
+---
+
+**Status:** Ready to deploy! 🎯
