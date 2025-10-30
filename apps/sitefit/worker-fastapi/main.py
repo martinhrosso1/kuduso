@@ -104,6 +104,13 @@ class JobProcessor:
             )
             lock_renewal_task.start()
             
+            logger.info(json.dumps({
+                "event": "job.before_appserver",
+                "job_id": job_id,
+                "definition": body.get("definition"),
+                "version": body.get("version")
+            }))
+            
             try:
                 # Call AppServer
                 result = self._call_appserver(
@@ -113,6 +120,12 @@ class JobProcessor:
                     payload=body.get("payload"),
                     correlation_id=correlation_id
                 )
+                
+                logger.info(json.dumps({
+                    "event": "job.after_appserver",
+                    "job_id": job_id,
+                    "has_result": bool(result)
+                }))
                 
                 # Insert result
                 db.insert_result(
