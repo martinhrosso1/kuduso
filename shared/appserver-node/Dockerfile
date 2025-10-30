@@ -3,14 +3,14 @@ FROM node:18-alpine AS builder
 
 WORKDIR /app
 
-# Copy package files
-COPY package*.json ./
+# Copy package files from shared/appserver-node
+COPY shared/appserver-node/package*.json ./
 
 # Install ALL dependencies (including devDependencies for building)
 RUN npm ci
 
-# Copy source code
-COPY . .
+# Copy source code from shared/appserver-node
+COPY shared/appserver-node/ ./
 
 # Build TypeScript
 RUN npm run build
@@ -21,14 +21,14 @@ FROM node:18-alpine
 WORKDIR /app
 
 # Copy package files and install production dependencies only
-COPY package*.json ./
+COPY shared/appserver-node/package*.json ./
 RUN npm ci --only=production && npm cache clean --force
 
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist
 
 # Copy contracts directory (needed for schema validation)
-COPY ../../contracts ./contracts
+COPY contracts ./contracts
 
 # Expose port
 EXPOSE 8080
