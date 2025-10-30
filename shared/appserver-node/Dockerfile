@@ -28,8 +28,7 @@ RUN npm ci --only=production && npm cache clean --force
 COPY --from=builder /app/dist ./dist
 
 # Copy contracts directory (needed for schema validation)
-# Note: Contracts will be mounted or copied separately in deployment
-# COPY ../../contracts ./contracts
+COPY ../../contracts ./contracts
 
 # Expose port
 EXPOSE 8080
