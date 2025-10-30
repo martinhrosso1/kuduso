@@ -18,6 +18,11 @@ app.get('/health', (req: Request, res: Response) => {
   res.json({ status: 'ok', service: 'appserver-node', mode: USE_COMPUTE ? 'compute' : 'mock' });
 });
 
+// Readiness check
+app.get('/ready', (req: Request, res: Response) => {
+  res.json({ status: 'ready', service: 'appserver-node' });
+});
+
 // Main solve endpoint
 app.post('/gh/:def\\::ver/solve', async (req: Request, res: Response) => {
   const cid = (req.header('x-correlation-id') || randomUUID()) as string;
