@@ -45,9 +45,18 @@ class JobProcessor:
     """Process jobs from Service Bus queue"""
     
     def __init__(self):
+        logger.info(json.dumps({
+            "event": "processor.init",
+            "queue": SERVICEBUS_QUEUE,
+            "has_conn": bool(SERVICEBUS_CONN)
+        }))
         self.client = ServiceBusClient.from_connection_string(SERVICEBUS_CONN)
         self.receiver: ServiceBusReceiver = self.client.get_queue_receiver(SERVICEBUS_QUEUE)
         self.running = False
+        logger.info(json.dumps({
+            "event": "processor.initialized",
+            "queue": SERVICEBUS_QUEUE
+        }))
         
     def process_message(self, message: ServiceBusMessage) -> None:
         """Process a single message"""
@@ -238,12 +247,31 @@ class JobProcessor:
     def run(self) -> None:
         """Main worker loop"""
         self.running = True
-        logger.info("Worker started - waiting for messages...")
+        logger.info(json.dumps({
+            "event": "worker.start",
+            "queue": SERVICEBUS_QUEUE,
+            "conn_configured": bool(SERVICEBUS_CONN),
+            "max_wait": 5
+        }))
         
         try:
+            iteration = 0
             while self.running:
+                iteration += 1
+                logger.info(json.dumps({
+                    "event": "worker.poll",
+                    "iteration": iteration,
+                    "queue": SERVICEBUS_QUEUE
+                }))
+                
                 # Receive one message at a time
                 messages = self.receiver.receive_messages(max_message_count=1, max_wait_time=5)
+                
+                logger.info(json.dumps({
+                    "event": "worker.received",
+                    "message_count": len(messages),
+                    "iteration": iteration
+                }))
                 
                 for message in messages:
                     self.process_message(message)
@@ -252,6 +280,8 @@ class JobProcessor:
             logger.info("Worker interrupted")
         except Exception as e:
             logger.error(f"Worker error: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
         finally:
             self.close()
     
