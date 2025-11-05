@@ -81,6 +81,11 @@ output "artifacts_container_name" {
   value       = azurerm_storage_container.artifacts.name
 }
 
+output "vm_scripts_container_name" {
+  description = "Name of the VM scripts blob container"
+  value       = azurerm_storage_container.vm_scripts.name
+}
+
 # Service Bus
 output "servicebus_namespace_id" {
   description = "ID of the Service Bus Namespace"

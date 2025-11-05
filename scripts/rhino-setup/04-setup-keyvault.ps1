@@ -27,7 +27,7 @@ if ($existing) {
     Write-Host '  [System.Environment]::SetEnvironmentVariable("RHINO_COMPUTE_KEY", $null, "Machine")' -ForegroundColor Gray
     Write-Host ""
     Write-Host "Step 4: COMPLETE - Continue to 05-download-compute.ps1" -ForegroundColor Green
-    exit 0
+    return  # Use return instead of exit to avoid closing PowerShell window
 }
 
 Write-Host "Fetching API key from Azure Key Vault..." -ForegroundColor Yellow
@@ -109,5 +109,5 @@ catch {
     Write-Host "Get the key from your local machine and set manually:" -ForegroundColor Yellow
     Write-Host '  $key = "paste-key-here"' -ForegroundColor Gray
     Write-Host '  [System.Environment]::SetEnvironmentVariable("RHINO_COMPUTE_KEY", $key, "Machine")' -ForegroundColor Gray
-    exit 1
+    throw "Script failed - see error above"
 }

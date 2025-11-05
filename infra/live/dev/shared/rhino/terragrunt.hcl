@@ -10,9 +10,12 @@ dependency "core" {
   config_path = "../core"
   
   mock_outputs = {
-    resource_group_name = "mock-rg"
-    location            = "westeurope"
-    key_vault_id        = "mock-kv-id"
+    resource_group_name         = "mock-rg"
+    location                    = "westeurope"
+    key_vault_id                = "mock-kv-id"
+    storage_account_name        = "mock-storage"
+    storage_account_primary_key = "mock-key"
+    vm_scripts_container_name   = "mock-container"
   }
 }
 
@@ -33,6 +36,11 @@ inputs = {
   # Automated Setup Script
   # Read the script content from repository
   setup_script_content = file("${get_repo_root()}/scripts/rhino-setup/00-automated-setup.ps1")
+  
+  # Storage Account (for script uploads to blob storage)
+  storage_account_name      = dependency.core.outputs.storage_account_name
+  storage_account_key       = dependency.core.outputs.storage_account_primary_key
+  vm_scripts_container_name = dependency.core.outputs.vm_scripts_container_name
   
   # VM Configuration
   vm_size         = "Standard_B2s" # Smallest suitable: 2 vCPUs, 4GB RAM (~$30/month)

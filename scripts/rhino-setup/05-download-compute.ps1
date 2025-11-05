@@ -23,7 +23,7 @@ if (Test-Path "$InstallPath\compute.geometry.exe") {
     Write-Host "  Remove-Item -Path $InstallPath -Recurse -Force" -ForegroundColor Gray
     Write-Host ""
     Write-Host "Step 5: COMPLETE - Continue to 06-configure-iis.ps1" -ForegroundColor Green
-    exit 0
+    return
 }
 
 Write-Host "Downloading Rhino.Compute binaries..." -ForegroundColor Yellow
@@ -99,5 +99,5 @@ catch {
     Write-Host "Manual installation:" -ForegroundColor Yellow
     Write-Host "1. Download rhino.compute.zip from GitHub"
     Write-Host "2. Extract to: $InstallPath"
-    exit 1
+    throw "Script failed - see error above"
 }

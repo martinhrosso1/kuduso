@@ -84,6 +84,13 @@ resource "azurerm_storage_container" "artifacts" {
   container_access_type = "private"
 }
 
+# Blob container for VM custom extension scripts
+resource "azurerm_storage_container" "vm_scripts" {
+  name                  = "rhino-vm-custom-extension-scripts"
+  storage_account_name  = azurerm_storage_account.main.name
+  container_access_type = "private"
+}
+
 # Service Bus Namespace
 resource "azurerm_servicebus_namespace" "main" {
   name                = "${var.name_prefix}-servicebus"

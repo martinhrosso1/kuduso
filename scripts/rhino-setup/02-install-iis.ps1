@@ -16,7 +16,7 @@ if ($iis) {
     Write-Host "✓ WebAdministration module loaded" -ForegroundColor Green
     Write-Host ""
     Write-Host "Step 2: COMPLETE - Continue to 03-install-dotnet.ps1" -ForegroundColor Green
-    exit 0
+    return
 }
 
 Write-Host "Installing IIS and required features..." -ForegroundColor Yellow
@@ -75,5 +75,5 @@ catch {
     Write-Host "1. Ensure you're running PowerShell as Administrator"
     Write-Host "2. Check Windows Update is not blocking installations"
     Write-Host "3. Restart VM and try again"
-    exit 1
+    throw "Script failed - see error above"
 }

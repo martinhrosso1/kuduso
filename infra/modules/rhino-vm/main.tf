@@ -192,8 +192,17 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "main" {
   tags = local.tags
 }
 
+# Upload the setup script to Azure Blob Storage
+resource "azurerm_storage_blob" "setup_script" {
+  name                   = "00-automated-setup.ps1"
+  storage_account_name   = var.storage_account_name
+  storage_container_name = var.vm_scripts_container_name
+  type                   = "Block"
+  source_content         = var.setup_script_content
+}
+
 # Custom Script Extension - Automated Rhino.Compute Setup
-# Runs the automated setup script directly from the repository
+# Downloads and runs the setup script from Azure Blob Storage
 # Note: Rhino 8 installation (script 09) must still be done manually due to licensing
 resource "azurerm_virtual_machine_extension" "rhino_setup" {
   name                 = "RhinoComputeSetup"
@@ -202,24 +211,28 @@ resource "azurerm_virtual_machine_extension" "rhino_setup" {
   type                 = "CustomScriptExtension"
   type_handler_version = "1.10"
   
-  # Two-stage approach to avoid command line length limits:
-  # 1. Write the base64-encoded script content to a file
-  # 2. Decode and execute the script file
+  # Download script from blob storage via fileUris (no size limits!)
+  settings = jsonencode({
+    fileUris = [azurerm_storage_blob.setup_script.url]
+    timestamp = azurerm_storage_blob.setup_script.content_md5  # Force update when script changes
+  })
+  
+  # Use storage account key for authentication and execute the downloaded script
   protected_settings = jsonencode({
-    commandToExecute = "powershell.exe -ExecutionPolicy Bypass -Command \"[System.IO.Directory]::CreateDirectory('C:\\rhino-setup') | Out-Null; [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${base64encode(var.setup_script_content)}')) | Out-File -FilePath 'C:\\rhino-setup\\00-automated-setup.ps1' -Encoding UTF8 -Force; & 'C:\\rhino-setup\\00-automated-setup.ps1'\""
+    storageAccountName = var.storage_account_name
+    storageAccountKey  = var.storage_account_key
+    commandToExecute   = "powershell.exe -ExecutionPolicy Bypass -File 00-automated-setup.ps1"
   })
   
   tags = local.tags
+  
+  depends_on = [azurerm_storage_blob.setup_script]
 }
 
-# Key Vault Access Policy - Grant VM's Managed Identity access to secrets
-resource "azurerm_key_vault_access_policy" "vm_secrets" {
-  key_vault_id = var.key_vault_id
-  tenant_id    = azurerm_windows_virtual_machine.main.identity[0].tenant_id
-  object_id    = azurerm_windows_virtual_machine.main.identity[0].principal_id
-  
-  secret_permissions = [
-    "Get",
-    "List"
-  ]
+# Key Vault RBAC - Grant VM's Managed Identity access to secrets
+# Note: Key Vault is using RBAC mode (enableRbacAuthorization: true)
+resource "azurerm_role_assignment" "vm_keyvault_secrets_user" {
+  scope                = var.key_vault_id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = azurerm_windows_virtual_machine.main.identity[0].principal_id
 }

@@ -14,7 +14,7 @@ if (Get-Command choco -ErrorAction SilentlyContinue) {
     choco --version
     Write-Host ""
     Write-Host "Step 1: COMPLETE" -ForegroundColor Green
-    exit 0
+    return
 }
 
 Write-Host "Installing Chocolatey package manager..." -ForegroundColor Yellow
@@ -50,5 +50,5 @@ catch {
     Write-Host "1. Ensure you're running PowerShell as Administrator"
     Write-Host "2. Check internet connectivity"
     Write-Host "3. Try manual install: https://chocolatey.org/install"
-    exit 1
+    throw "Script failed - see error above"
 }

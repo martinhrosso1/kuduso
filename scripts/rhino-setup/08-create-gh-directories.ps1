@@ -112,5 +112,5 @@ curl -Method POST http://localhost:8081/grasshopper \
 catch {
     Write-Host ""
     Write-Host "✗ Failed to create directories: $_" -ForegroundColor Red
-    exit 1
+    throw "Script failed - see error above"
 }

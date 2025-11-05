@@ -53,5 +53,5 @@ catch {
     Write-Host "2. Create new Inbound Rule"
     Write-Host "3. Port: TCP $Port"
     Write-Host "4. Action: Allow"
-    exit 1
+    throw "Script failed - see error above"
 }

@@ -184,7 +184,7 @@ if ($testsFailed -eq 0) {
     Write-Host "3. Update AppServer to use Compute URL" -ForegroundColor Yellow
     Write-Host ""
     Write-Host "Step 10: COMPLETE - Setup finished!" -ForegroundColor Green
-    exit 0
+    return
 }
 else {
     Write-Host "✗ Some tests failed. Fix issues before proceeding." -ForegroundColor Red
@@ -194,5 +194,5 @@ else {
     Write-Host "- Check IIS logs: C:\inetpub\compute\logs\stdout*.log" -ForegroundColor Gray
     Write-Host "- Verify Rhino is installed and licensed" -ForegroundColor Gray
     Write-Host "- Check firewall: Get-NetFirewallRule -DisplayName 'Rhino.Compute*'" -ForegroundColor Gray
-    exit 1
+    throw "Some tests failed - see errors above"
 }

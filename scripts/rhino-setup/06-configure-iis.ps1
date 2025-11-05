@@ -21,12 +21,12 @@ Write-Host ""
 # Verify prerequisites
 if (!(Get-Service W3SVC -ErrorAction SilentlyContinue)) {
     Write-Host "✗ IIS not installed. Run 02-install-iis.ps1 first" -ForegroundColor Red
-    exit 1
+    throw "IIS not installed - run script 02 first"
 }
 
 if (!(Test-Path "$PhysicalPath\compute.geometry.exe")) {
     Write-Host "✗ Rhino.Compute not found. Run 05-download-compute.ps1 first" -ForegroundColor Red
-    exit 1
+    throw "Rhino.Compute not found - run script 05 first"
 }
 
 Import-Module WebAdministration
@@ -138,5 +138,5 @@ catch {
     Write-Host "1. Ensure IIS is running: Get-Service W3SVC"
     Write-Host "2. Check if port $Port is already in use: netstat -ano | findstr :$Port"
     Write-Host "3. Review IIS logs in: C:\inetpub\logs\"
-    exit 1
+    throw "Script failed - see error above"
 }

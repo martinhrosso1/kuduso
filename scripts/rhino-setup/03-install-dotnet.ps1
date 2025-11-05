@@ -11,7 +11,7 @@ Write-Host "========================================" -ForegroundColor Cyan
 # Verify Chocolatey is installed
 if (!(Get-Command choco -ErrorAction SilentlyContinue)) {
     Write-Host "✗ Chocolatey not found. Run 01-install-chocolatey.ps1 first" -ForegroundColor Red
-    exit 1
+    throw "Chocolatey not found - run script 01 first"
 }
 
 Write-Host "Installing .NET 8.0 SDK and runtimes..." -ForegroundColor Yellow
@@ -54,5 +54,5 @@ catch {
     Write-Host "3. Continue anyway - Rhino.Compute might work with existing .NET"
     Write-Host ""
     Write-Host "You can skip this error and continue to step 4" -ForegroundColor Yellow
-    exit 1
+    throw "Script failed - see error above"
 }
