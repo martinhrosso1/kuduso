@@ -29,10 +29,12 @@ inputs = {
   # VM Configuration
   vm_size         = "Standard_B2s" # Smallest suitable: 2 vCPUs, 4GB RAM (~$30/month)
   admin_username  = "rhinoadmin"
-  admin_password  = get_env("RHINO_VM_PASSWORD", "ChangeMe123!") # Set via env var
+  admin_password  = get_env("RHINO_VM_PASSWORD", "ChangeMe123!_?") # Set via env var
   
   # Network Security
-  allowed_source_ip = get_env("MY_PUBLIC_IP", "0.0.0.0/0") # Set to your IP!
+  # Update this with your current public IP in CIDR format (e.g., "178.40.216.159/32")
+  # Or set via env var: export MY_PUBLIC_IP="178.40.216.159/32"
+  allowed_source_ip = get_env("MY_PUBLIC_IP", "178.40.216.159/32")
   
   # Rhino.Compute
   rhino_compute_port = 8081

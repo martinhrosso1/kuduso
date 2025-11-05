@@ -84,6 +84,19 @@ resource "azurerm_network_security_group" "main" {
     destination_address_prefix = "*"
   }
   
+  # Allow Windows Admin Center from your IP
+  security_rule {
+    name                       = "AllowWindowsAdminCenter"
+    priority                   = 130
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = "6516"
+    source_address_prefix      = var.allowed_source_ip
+    destination_address_prefix = "*"
+  }
+  
   # Deny all other inbound
   security_rule {
     name                       = "DenyAllInbound"
