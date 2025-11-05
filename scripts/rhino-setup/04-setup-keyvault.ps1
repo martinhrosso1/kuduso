@@ -89,7 +89,7 @@ try {
     Write-Host ""
     Write-Host "✓ RHINO_COMPUTE_KEY configured" -ForegroundColor Green
     Write-Host ""
-    Write-Host "Step 4: COMPLETE - Continue to 05-download-compute.ps1" -ForegroundColor Green
+    Write-Host "Step 4: COMPLETE - Continue to 04a-install-build-tools.ps1" -ForegroundColor Green
 }
 catch {
     Write-Host ""

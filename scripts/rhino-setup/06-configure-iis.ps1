@@ -24,7 +24,7 @@ if (!(Get-Service W3SVC -ErrorAction SilentlyContinue)) {
     throw "IIS not installed - run script 02 first"
 }
 
-if (!(Test-Path "$PhysicalPath\compute.geometry.exe")) {
+if (!(Test-Path "$PhysicalPath\rhino.compute.exe")) {
     Write-Host "✗ Rhino.Compute not found. Run 05-download-compute.ps1 first" -ForegroundColor Red
     throw "Rhino.Compute not found - run script 05 first"
 }
@@ -77,7 +77,7 @@ try {
       <handlers>
         <add name="aspNetCore" path="*" verb="*" modules="AspNetCoreModuleV2" resourceType="Unspecified" />
       </handlers>
-      <aspNetCore processPath=".\compute.geometry.exe" 
+      <aspNetCore processPath=".\rhino.compute.exe" 
                   arguments="" 
                   stdoutLogEnabled="true" 
                   stdoutLogFile=".\logs\stdout" 
@@ -93,13 +93,19 @@ try {
 </configuration>
 "@
     
-    $webConfig | Out-File -FilePath "$PhysicalPath\web.config" -Encoding UTF8 -Force
-    Write-Host "✓ web.config created" -ForegroundColor Green
+    # Write web.config using UTF8 without BOM (IIS requirement)
+    [System.IO.File]::WriteAllText("$PhysicalPath\web.config", $webConfig, [System.Text.UTF8Encoding]::new($false))
+    Write-Host "✓ web.config created (UTF8 without BOM)" -ForegroundColor Green
     
     # Enable warm-up
     Write-Host "[4/5] Enabling application warm-up..." -ForegroundColor Yellow
     
     Set-ItemProperty "IIS:\Sites\$SiteName" -Name "applicationDefaults.preloadEnabled" -Value $true
+    
+    # Clear any existing warm-up configuration first to prevent duplicates
+    & "$env:SystemRoot\System32\inetsrv\appcmd.exe" clear config "$SiteName" `
+        /section:applicationInitialization `
+        /commit:apphost 2>$null | Out-Null
     
     & "$env:SystemRoot\System32\inetsrv\appcmd.exe" set config "$SiteName" `
         /section:applicationInitialization `

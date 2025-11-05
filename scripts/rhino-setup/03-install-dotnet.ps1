@@ -20,17 +20,21 @@ Write-Host ""
 
 try {
     # Install .NET components
-    Write-Host "[1/4] Installing .NET 8.0 SDK..." -ForegroundColor Yellow
+    Write-Host "[1/5] Installing .NET 8.0 SDK..." -ForegroundColor Yellow
     choco install dotnet-8.0-sdk -y --no-progress
     
-    Write-Host "[2/4] Installing .NET 8.0 Runtime..." -ForegroundColor Yellow
+    Write-Host "[2/5] Installing .NET 8.0 Runtime..." -ForegroundColor Yellow
     choco install dotnet-8.0-runtime -y --no-progress
     
-    Write-Host "[3/4] Installing .NET 8.0 Desktop Runtime (required for Rhino)..." -ForegroundColor Yellow
+    Write-Host "[3/5] Installing .NET 8.0 Desktop Runtime (required for Rhino)..." -ForegroundColor Yellow
     choco install dotnet-8.0-desktopruntime -y --no-progress
     
-    Write-Host "[4/4] Installing ASP.NET Core Hosting Bundle..." -ForegroundColor Yellow
-    choco install dotnet-aspnethosting-bundle -y --no-progress
+    Write-Host "[4/5] Installing ASP.NET Core 8.0 Hosting Bundle (IIS Module)..." -ForegroundColor Yellow
+    choco install dotnet-8.0-aspnetcoremodule-v2 -y --no-progress
+    
+    Write-Host "[5/5] Restarting IIS to register ASP.NET Core Module..." -ForegroundColor Yellow
+    iisreset /restart | Out-Null
+    Start-Sleep -Seconds 3
     
     Write-Host ""
     Write-Host "✓ .NET runtimes installed successfully" -ForegroundColor Green
