@@ -35,7 +35,9 @@ mstsc /v:20.73.173.209
 open rdp://20.73.173.209
 ```
 
-### 2. Copy Scripts to VM
+### 2. Run script directly in powershell of VM, one by one
+
+<!-- ### 2. Copy Scripts to VM
 
 **Option A: Download from GitHub (if you push there)**
 ```powershell
@@ -50,10 +52,22 @@ cd kuduso\scripts\rhino-setup
 2. Enable "Local Resources" → "More" → "Drives" (share your local drive)
 3. Copy `scripts/rhino-setup` folder from your local machine to `C:\rhino-setup` on VM
 
+Disconnect and reconnect with folder sharing enabled:
+```bash
+xfreerdp /u:rhinoadmin /p:'ChangeMe123!_?' /v:20.73.173.209:3389 \
+  /dynamic-resolution /cert:ignore \
+  /drive:local,/home/martin/Desktop/kuduso/scripts/rhino-setup
+```
+Then on the Windows VM, open PowerShell and run (this will copy the scripts):
+```powershell
+# The shared folder will appear as a network drive (usually \\tsclient\local)
+Copy-Item -Path "\\tsclient\local\*" -Destination "C:\scripts\rhino-setup\" -Recurse -Force
+```
+
 **Option C: Download individual scripts**
 1. On VM, open browser
 2. Navigate to your repository
-3. Download each `.ps1` file to `C:\rhino-setup`
+3. Download each `.ps1` file to `C:\rhino-setup` -->
 
 ---
 

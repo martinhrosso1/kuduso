@@ -44,3 +44,13 @@ output "nsg_id" {
   description = "ID of the Network Security Group"
   value       = azurerm_network_security_group.main.id
 }
+
+output "identity_principal_id" {
+  description = "Principal ID of the VM's Managed Identity"
+  value       = azurerm_windows_virtual_machine.main.identity[0].principal_id
+}
+
+output "identity_tenant_id" {
+  description = "Tenant ID of the VM's Managed Identity"
+  value       = azurerm_windows_virtual_machine.main.identity[0].tenant_id
+}

@@ -67,3 +67,13 @@ variable "auto_shutdown_timezone" {
   type        = string
   default     = "Central Europe Standard Time"
 }
+
+variable "key_vault_id" {
+  description = "ID of the Key Vault to grant access to"
+  type        = string
+}
+
+variable "setup_script_content" {
+  description = "Content of the automated setup PowerShell script"
+  type        = string
+}

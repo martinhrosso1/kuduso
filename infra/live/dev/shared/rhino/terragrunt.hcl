@@ -12,6 +12,7 @@ dependency "core" {
   mock_outputs = {
     resource_group_name = "mock-rg"
     location            = "westeurope"
+    key_vault_id        = "mock-kv-id"
   }
 }
 
@@ -25,6 +26,13 @@ inputs = {
   name_prefix         = "kuduso-dev"
   resource_group_name = dependency.core.outputs.resource_group_name
   location            = dependency.core.outputs.location
+  
+  # Key Vault
+  key_vault_id = dependency.core.outputs.key_vault_id
+  
+  # Automated Setup Script
+  # Read the script content from repository
+  setup_script_content = file("${get_repo_root()}/scripts/rhino-setup/00-automated-setup.ps1")
   
   # VM Configuration
   vm_size         = "Standard_B2s" # Smallest suitable: 2 vCPUs, 4GB RAM (~$30/month)

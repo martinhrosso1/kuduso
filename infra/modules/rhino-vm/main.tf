@@ -167,6 +167,11 @@ resource "azurerm_windows_virtual_machine" "main" {
     storage_account_uri = null # Uses managed storage
   }
   
+  # Enable System-assigned Managed Identity
+  identity {
+    type = "SystemAssigned"
+  }
+  
   tags = local.tags
 }
 
@@ -187,11 +192,9 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "main" {
   tags = local.tags
 }
 
-# Custom Script Extension - Install Rhino.Compute
-# Note: This is a placeholder. In reality, you need to:
-# 1. Upload Rhino.Compute installer to Azure Blob or use direct download
-# 2. Create PowerShell script to install and configure
-# 3. Reference it here
+# Custom Script Extension - Automated Rhino.Compute Setup
+# Runs the automated setup script directly from the repository
+# Note: Rhino 8 installation (script 09) must still be done manually due to licensing
 resource "azurerm_virtual_machine_extension" "rhino_setup" {
   name                 = "RhinoComputeSetup"
   virtual_machine_id   = azurerm_windows_virtual_machine.main.id
@@ -199,10 +202,24 @@ resource "azurerm_virtual_machine_extension" "rhino_setup" {
   type                 = "CustomScriptExtension"
   type_handler_version = "1.10"
   
-  # Create placeholder file - actual Rhino.Compute installation is manual
+  # Two-stage approach to avoid command line length limits:
+  # 1. Write the base64-encoded script content to a file
+  # 2. Decode and execute the script file
   protected_settings = jsonencode({
-    commandToExecute = "powershell.exe -Command \"New-Item -Path C:\\rhino-placeholder.txt -ItemType File -Force; Write-Output 'Rhino.Compute placeholder - manual installation required'\""
+    commandToExecute = "powershell.exe -ExecutionPolicy Bypass -Command \"[System.IO.Directory]::CreateDirectory('C:\\rhino-setup') | Out-Null; [System.Text.Encoding]::UTF8.GetString([System.Convert]::FromBase64String('${base64encode(var.setup_script_content)}')) | Out-File -FilePath 'C:\\rhino-setup\\00-automated-setup.ps1' -Encoding UTF8 -Force; & 'C:\\rhino-setup\\00-automated-setup.ps1'\""
   })
   
   tags = local.tags
+}
+
+# Key Vault Access Policy - Grant VM's Managed Identity access to secrets
+resource "azurerm_key_vault_access_policy" "vm_secrets" {
+  key_vault_id = var.key_vault_id
+  tenant_id    = azurerm_windows_virtual_machine.main.identity[0].tenant_id
+  object_id    = azurerm_windows_virtual_machine.main.identity[0].principal_id
+  
+  secret_permissions = [
+    "Get",
+    "List"
+  ]
 }
