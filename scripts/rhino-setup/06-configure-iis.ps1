@@ -48,6 +48,42 @@ try {
     Set-ItemProperty "IIS:\AppPools\$AppPoolName" -Name "autoStart" -Value $true
     Set-ItemProperty "IIS:\AppPools\$AppPoolName" -Name "processModel.idleTimeout" -Value ([TimeSpan]::FromMinutes(0))
     
+    # CRITICAL: Configure for Rhino.Compute (requires COM access)
+    Set-ItemProperty "IIS:\AppPools\$AppPoolName" -Name "processModel.loadUserProfile" -Value $true
+    Set-ItemProperty "IIS:\AppPools\$AppPoolName" -Name "enable32BitAppOnWin64" -Value $false
+    Set-ItemProperty "IIS:\AppPools\$AppPoolName" -Name "processModel.identityType" -Value "NetworkService"
+    
+    # Grant NetworkService access to Rhino installation
+    $rhinoPath = "C:\Program Files\Rhino 8"
+    if (Test-Path $rhinoPath) {
+        Write-Host "  Granting NetworkService access to Rhino..." -ForegroundColor Gray
+        $acl = Get-Acl $rhinoPath
+        $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+            "NETWORK SERVICE",
+            "ReadAndExecute",
+            "ContainerInherit,ObjectInherit",
+            "None",
+            "Allow"
+        )
+        $acl.AddAccessRule($rule)
+        Set-Acl $rhinoPath $acl
+    }
+    
+    # Grant access to Rhino settings
+    $programData = "C:\ProgramData\McNeel"
+    if (Test-Path $programData) {
+        $acl = Get-Acl $programData
+        $rule = New-Object System.Security.AccessControl.FileSystemAccessRule(
+            "NETWORK SERVICE",
+            "ReadAndExecute",
+            "ContainerInherit,ObjectInherit",
+            "None",
+            "Allow"
+        )
+        $acl.AddAccessRule($rule)
+        Set-Acl $programData $acl
+    }
+    
     Write-Host "✓ App pool created and configured" -ForegroundColor Green
     
     # Create Website

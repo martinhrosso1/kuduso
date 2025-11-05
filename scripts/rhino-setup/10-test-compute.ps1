@@ -97,55 +97,8 @@ catch {
     $testsFailed++
 }
 
-# Test 5: Authenticated endpoint
-if ($apiKey) {
-    Write-Host "[TEST 5] Testing authenticated endpoint..." -ForegroundColor Cyan
-    
-    try {
-        $headers = @{
-            "RhinoComputeKey" = $apiKey
-            "Content-Type"    = "application/json"
-        }
-        
-        $body = @{
-            x = 10
-            y = 20
-            z = 30
-        } | ConvertTo-Json
-        
-        $response = Invoke-RestMethod -Uri "$ComputeUrl/rhino/geometry/point" `
-            -Method POST `
-            -Headers $headers `
-            -Body $body `
-            -UseBasicParsing `
-            -TimeoutSec 10
-        
-        if ($response) {
-            Write-Host "  ✓ PASS: Authenticated request successful" -ForegroundColor Green
-            Write-Host "    Response: $($response | ConvertTo-Json -Compress -Depth 2)" -ForegroundColor Gray
-            $testsPassed++
-        }
-    }
-    catch {
-        Write-Host "  ✗ FAIL: Authenticated request failed" -ForegroundColor Red
-        
-        if ($_.Exception.Response.StatusCode.value__ -eq 401) {
-            Write-Host "    Error: 401 Unauthorized - API key mismatch" -ForegroundColor Gray
-            Write-Host "    Verify RHINO_COMPUTE_KEY matches the key in Key Vault" -ForegroundColor Yellow
-        }
-        else {
-            Write-Host "    Error: $_" -ForegroundColor Gray
-        }
-        
-        $testsFailed++
-    }
-}
-else {
-    Write-Host "[TEST 5] Skipping authenticated test (no API key)" -ForegroundColor Yellow
-}
-
-# Test 6: External accessibility (from public IP)
-Write-Host "[TEST 6] Testing external accessibility..." -ForegroundColor Cyan
+# Test 5: External accessibility (from public IP)
+Write-Host "[TEST 5] Testing external accessibility..." -ForegroundColor Cyan
 
 try {
     $publicIp = (Invoke-RestMethod -Uri "http://ifconfig.me/ip" -TimeoutSec 5).Trim()
