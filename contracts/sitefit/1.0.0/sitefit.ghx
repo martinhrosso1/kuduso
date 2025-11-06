@@ -1,0 +1,173 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Archive name="Root" version="1.0">
+  <items count="1">
+    <item name="ArchiveName" type_name="gh_string" type_code="10">
+      <value>Grasshopper Definition</value>
+    </item>
+    <item name="DocumentID" type_name="gh_guid" type_code="9">
+      <value>00000000-0000-0000-0000-000000000000</value>
+    </item>
+    <item name="DocumentVersion" type_name="gh_version" type_code="80">
+      <major>1</major>
+      <minor>0</minor>
+      <revision>0</revision>
+    </item>
+    <item name="DefinitionProperties" type_name="gh_archive" type_code="60">
+      <items count="1">
+        <item name="Name" type_name="gh_string" type_code="10">
+          <value>SiteFit v1.0.0</value>
+        </item>
+        <item name="Description" type_name="gh_string" type_code="10">
+          <value>House placement optimization on parcel</value>
+        </item>
+      </items>
+    </item>
+    <item name="DefinitionObjects" type_name="gh_archive" type_code="60">
+      <items count="13">
+        <!-- INPUT: parcel_polygon -->
+        <item name="Object" type_name="gh_archive" type_code="60">
+          <items count="4">
+            <item name="GUID" type_name="gh_guid" type_code="9">
+              <value>57da07bd-ecab-415d-9d86-af36d7073abc</value>
+            </item>
+            <item name="Name" type_name="gh_string" type_code="10">
+              <value>parcel_polygon</value>
+            </item>
+            <item name="NickName" type_name="gh_string" type_code="10">
+              <value>parcel_polygon</value>
+            </item>
+            <item name="ComponentGuid" type_name="gh_guid" type_code="9">
+              <value>3581f42a-9592-4549-bd6b-1c0fc39d067b</value>
+            </item>
+          </items>
+        </item>
+
+        <!-- INPUT: house_polygon -->
+        <item name="Object" type_name="gh_archive" type_code="60">
+          <items count="4">
+            <item name="GUID" type_name="gh_guid" type_code="9">
+              <value>57da07bd-ecab-415d-9d86-af36d7073abd</value>
+            </item>
+            <item name="Name" type_name="gh_string" type_code="10">
+              <value>house_polygon</value>
+            </item>
+            <item name="NickName" type_name="gh_string" type_code="10">
+              <value>house_polygon</value>
+            </item>
+            <item name="ComponentGuid" type_name="gh_guid" type_code="9">
+              <value>3581f42a-9592-4549-bd6b-1c0fc39d067b</value>
+            </item>
+          </items>
+        </item>
+
+        <!-- INPUT: rotation_spec (JSON object with min, max, step) -->
+        <item name="Object" type_name="gh_archive" type_code="60">
+          <items count="4">
+            <item name="GUID" type_name="gh_guid" type_code="9">
+              <value>57da07bd-ecab-415d-9d86-af36d7073abe</value>
+            </item>
+            <item name="Name" type_name="gh_string" type_code="10">
+              <value>rotation_spec</value>
+            </item>
+            <item name="NickName" type_name="gh_string" type_code="10">
+              <value>rotation_spec</value>
+            </item>
+            <item name="ComponentGuid" type_name="gh_guid" type_code="9">
+              <value>3581f42a-9592-4549-bd6b-1c0fc39d067b</value>
+            </item>
+          </items>
+        </item>
+
+        <!-- INPUT: grid_step -->
+        <item name="Object" type_name="gh_archive" type_code="60">
+          <items count="4">
+            <item name="GUID" type_name="gh_guid" type_code="9">
+              <value>57da07bd-ecab-415d-9d86-af36d7073abf</value>
+            </item>
+            <item name="Name" type_name="gh_string" type_code="10">
+              <value>grid_step</value>
+            </item>
+            <item name="NickName" type_name="gh_string" type_code="10">
+              <value>grid_step</value>
+            </item>
+            <item name="ComponentGuid" type_name="gh_guid" type_code="9">
+              <value>3581f42a-9592-4549-bd6b-1c0fc39d067b</value>
+            </item>
+          </items>
+        </item>
+
+        <!-- INPUT: seed -->
+        <item name="Object" type_name="gh_archive" type_code="60">
+          <items count="4">
+            <item name="GUID" type_name="gh_guid" type_code="9">
+              <value>57da07bd-ecab-415d-9d86-af36d7073ac0</value>
+            </item>
+            <item name="Name" type_name="gh_string" type_code="10">
+              <value>seed</value>
+            </item>
+            <item name="NickName" type_name="gh_string" type_code="10">
+              <value>seed</value>
+            </item>
+            <item name="ComponentGuid" type_name="gh_guid" type_code="9">
+              <value>3581f42a-9592-4549-bd6b-1c0fc39d067b</value>
+            </item>
+          </items>
+        </item>
+
+        <!-- OUTPUT: placed_transforms (JSON array of transforms) -->
+        <item name="Object" type_name="gh_archive" type_code="60">
+          <items count="4">
+            <item name="GUID" type_name="gh_guid" type_code="9">
+              <value>8ec86459-bf01-4409-baee-174d0d2b13d0</value>
+            </item>
+            <item name="Name" type_name="gh_string" type_code="10">
+              <value>placed_transforms</value>
+            </item>
+            <item name="NickName" type_name="gh_string" type_code="10">
+              <value>placed_transforms</value>
+            </item>
+            <item name="ComponentGuid" type_name="gh_guid" type_code="9">
+              <value>8ec86459-bf01-4409-baee-174d0d2b13d0</value>
+            </item>
+          </items>
+        </item>
+
+        <!-- OUTPUT: placement_scores -->
+        <item name="Object" type_name="gh_archive" type_code="60">
+          <items count="4">
+            <item name="GUID" type_name="gh_guid" type_code="9">
+              <value>8ec86459-bf01-4409-baee-174d0d2b13d1</value>
+            </item>
+            <item name="Name" type_name="gh_string" type_code="10">
+              <value>placement_scores</value>
+            </item>
+            <item name="NickName" type_name="gh_string" type_code="10">
+              <value>placement_scores</value>
+            </item>
+            <item name="ComponentGuid" type_name="gh_guid" type_code="9">
+              <value>8ec86459-bf01-4409-baee-174d0d2b13d0</value>
+            </item>
+          </items>
+        </item>
+
+        <!-- OUTPUT: kpis (JSON array of metrics) -->
+        <item name="Object" type_name="gh_archive" type_code="60">
+          <items count="4">
+            <item name="GUID" type_name="gh_guid" type_code="9">
+              <value>8ec86459-bf01-4409-baee-174d0d2b13d2</value>
+            </item>
+            <item name="Name" type_name="gh_string" type_code="10">
+              <value>kpis</value>
+            </item>
+            <item name="NickName" type_name="gh_string" type_code="10">
+              <value>kpis</value>
+            </item>
+            <item name="ComponentGuid" type_name="gh_guid" type_code="9">
+              <value>8ec86459-bf01-4409-baee-174d0d2b13d0</value>
+            </item>
+          </items>
+        </item>
+      </items>
+    </item>
+  </items>
+</Archive>
