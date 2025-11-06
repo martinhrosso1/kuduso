@@ -10,12 +10,18 @@ dependency "core" {
   config_path = "../core"
   
   mock_outputs = {
-    resource_group_name         = "mock-rg"
-    location                    = "westeurope"
-    key_vault_id                = "mock-kv-id"
-    storage_account_name        = "mock-storage"
-    storage_account_primary_key = "mock-key"
-    vm_scripts_container_name   = "mock-container"
+    resource_group_name = "mock-rg"
+    location            = "westeurope"
+    key_vault_id        = "mock-kv-id"
+  }
+}
+
+# Dependency on compute-gallery for custom VM image
+dependency "gallery" {
+  config_path = "../compute-gallery"
+  
+  mock_outputs = {
+    image_version_id = "mock-image-id"
   }
 }
 
@@ -33,19 +39,14 @@ inputs = {
   # Key Vault
   key_vault_id = dependency.core.outputs.key_vault_id
   
-  # Automated Setup Script
-  # Read the script content from repository
-  setup_script_content = file("${get_repo_root()}/scripts/rhino-setup/00-automated-setup.ps1")
-  
-  # Storage Account (for script uploads to blob storage)
-  storage_account_name      = dependency.core.outputs.storage_account_name
-  storage_account_key       = dependency.core.outputs.storage_account_primary_key
-  vm_scripts_container_name = dependency.core.outputs.vm_scripts_container_name
+  # Custom Image from Compute Gallery
+  # This image has Rhino 8 and Rhino.Compute pre-installed and configured
+  source_image_id = dependency.gallery.outputs.image_version_id
   
   # VM Configuration
   vm_size         = "Standard_B2s" # Smallest suitable: 2 vCPUs, 4GB RAM (~$30/month)
   admin_username  = "rhinoadmin"
-  admin_password  = get_env("RHINO_VM_PASSWORD", "ChangeMe123!_?") # Set via env var
+  admin_password  = get_env("RHINO_VM_PASSWORD", "ChangeMe123!_?_?") # Set via env var
   
   # Network Security
   # Update this with your current public IP in CIDR format (e.g., "178.40.216.159/32")

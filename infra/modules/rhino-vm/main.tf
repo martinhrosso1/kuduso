@@ -154,13 +154,9 @@ resource "azurerm_windows_virtual_machine" "main" {
     storage_account_type = "Standard_LRS" # Use Standard for cost savings
   }
   
-  # Windows Server 2022 Datacenter
-  source_image_reference {
-    publisher = "MicrosoftWindowsServer"
-    offer     = "WindowsServer"
-    sku       = "2022-datacenter"
-    version   = "latest"
-  }
+  # Use custom image from Compute Gallery
+  # This image has Rhino 8 and Rhino.Compute pre-installed and configured
+  source_image_id = var.source_image_id
   
   # Enable boot diagnostics
   boot_diagnostics {
@@ -192,42 +188,17 @@ resource "azurerm_dev_test_global_vm_shutdown_schedule" "main" {
   tags = local.tags
 }
 
-# Upload the setup script to Azure Blob Storage
-resource "azurerm_storage_blob" "setup_script" {
-  name                   = "00-automated-setup.ps1"
-  storage_account_name   = var.storage_account_name
-  storage_container_name = var.vm_scripts_container_name
-  type                   = "Block"
-  source_content         = var.setup_script_content
-}
-
-# Custom Script Extension - Automated Rhino.Compute Setup
-# Downloads and runs the setup script from Azure Blob Storage
-# Note: Rhino 8 installation (script 09) must still be done manually due to licensing
-resource "azurerm_virtual_machine_extension" "rhino_setup" {
-  name                 = "RhinoComputeSetup"
-  virtual_machine_id   = azurerm_windows_virtual_machine.main.id
-  publisher            = "Microsoft.Compute"
-  type                 = "CustomScriptExtension"
-  type_handler_version = "1.10"
-  
-  # Download script from blob storage via fileUris (no size limits!)
-  settings = jsonencode({
-    fileUris = [azurerm_storage_blob.setup_script.url]
-    timestamp = azurerm_storage_blob.setup_script.content_md5  # Force update when script changes
-  })
-  
-  # Use storage account key for authentication and execute the downloaded script
-  protected_settings = jsonencode({
-    storageAccountName = var.storage_account_name
-    storageAccountKey  = var.storage_account_key
-    commandToExecute   = "powershell.exe -ExecutionPolicy Bypass -File 00-automated-setup.ps1"
-  })
-  
-  tags = local.tags
-  
-  depends_on = [azurerm_storage_blob.setup_script]
-}
+# Custom Script Extension removed - VM now uses pre-configured custom image
+# The image includes:
+# - Windows Server 2022 Datacenter
+# - Rhino 8 (licensed)
+# - Rhino.Compute built and configured
+# - IIS with proper app pool settings
+# - All dependencies (.NET, ASP.NET Core Module, etc.)
+#
+# Post-deployment steps required:
+# 1. Set RHINO_COMPUTE_KEY environment variable (via Azure Run Command or RDP)
+# 2. Restart IIS: iisreset /restart
 
 # Key Vault RBAC - Grant VM's Managed Identity access to secrets
 # Note: Key Vault is using RBAC mode (enableRbacAuthorization: true)

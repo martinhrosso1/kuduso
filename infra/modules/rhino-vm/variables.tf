@@ -73,23 +73,7 @@ variable "key_vault_id" {
   type        = string
 }
 
-variable "setup_script_content" {
-  description = "Content of the automated setup PowerShell script"
-  type        = string
-}
-
-variable "storage_account_name" {
-  description = "Name of the storage account for script uploads"
-  type        = string
-}
-
-variable "storage_account_key" {
-  description = "Primary access key for the storage account"
-  type        = string
-  sensitive   = true
-}
-
-variable "vm_scripts_container_name" {
-  description = "Name of the storage container for VM scripts"
+variable "source_image_id" {
+  description = "ID of the custom image from Compute Gallery to use for VM deployment"
   type        = string
 }
