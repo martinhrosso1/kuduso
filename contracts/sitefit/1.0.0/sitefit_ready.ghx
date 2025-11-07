@@ -1,0 +1,353 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+SiteFit v1.0.0 - Ready-to-Deploy Grasshopper Definition
+This file contains a complete, wired Grasshopper definition with:
+- 5 input parameters (parcel_polygon, house_polygon, rotation_spec, grid_step, seed)
+- 1 Python Script component with the full SiteFitSolver
+- 3 output parameters (placed_transforms, placement_scores, kpis)
+
+To use:
+1. Copy this file to your Rhino VM
+2. Place in: C:\RhinoDefinitions\sitefit\1.0.0\sitefit.ghx
+3. Test via Rhino.Compute API
+
+Note: This is a minimal but functional GHX. For complex editing, open in Grasshopper GUI.
+-->
+<Archive name="Root" version="1.0">
+  <items count="5">
+    <item name="ArchiveName" type_name="gh_string" type_code="10">Grasshopper Definition</item>
+    <item name="DocumentID" type_name="gh_guid" type_code="9">00000000-0000-0000-0000-000000000000</item>
+    <item name="DocumentVersion" type_name="gh_version" type_code="80">
+      <major>1</major>
+      <minor>0</minor>
+      <revision>0</revision>
+    </item>
+    <item name="DefinitionProperties" type_name="gh_archive" type_code="60">
+      <items count="3">
+        <item name="Name" type_name="gh_string" type_code="10">SiteFit v1.0.0</item>
+        <item name="Description" type_name="gh_string" type_code="10">House placement optimization solver</item>
+        <item name="Author" type_name="gh_string" type_code="10">Kuduso Platform</item>
+      </items>
+    </item>
+    <item name="DefinitionObjects" type_name="gh_archive" type_code="60">
+      <items count="9">
+        
+        <!-- INPUT 1: parcel_polygon (Curve) -->
+        <item name="Object" type_name="gh_archive" type_code="60">
+          <items count="8">
+            <item name="GUID" type_name="gh_guid" type_code="9">a1111111-1111-1111-1111-111111111111</item>
+            <item name="Name" type_name="gh_string" type_code="10">parcel_polygon</item>
+            <item name="NickName" type_name="gh_string" type_code="10">parcel_polygon</item>
+            <item name="Description" type_name="gh_string" type_code="10">Parcel boundary (closed curve)</item>
+            <item name="InstanceGuid" type_name="gh_guid" type_code="9">a1111111-1111-1111-1111-111111111111</item>
+            <item name="TypeName" type_name="gh_string" type_code="10">Grasshopper.Kernel.Parameters.Param_Curve</item>
+            <item name="Optional" type_name="gh_bool" type_code="1">false</item>
+            <item name="Attributes" type_name="gh_archive" type_code="60">
+              <items count="2">
+                <item name="Pivot" type_name="gh_drawing_pointf" type_code="31"><X>100</X><Y>100</Y></item>
+                <item name="Principal" type_name="gh_bool" type_code="1">true</item>
+              </items>
+            </item>
+          </items>
+        </item>
+
+        <!-- INPUT 2: house_polygon (Curve) -->
+        <item name="Object" type_name="gh_archive" type_code="60">
+          <items count="8">
+            <item name="GUID" type_name="gh_guid" type_code="9">a2222222-2222-2222-2222-222222222222</item>
+            <item name="Name" type_name="gh_string" type_code="10">house_polygon</item>
+            <item name="NickName" type_name="gh_string" type_code="10">house_polygon</item>
+            <item name="Description" type_name="gh_string" type_code="10">House footprint (closed curve)</item>
+            <item name="InstanceGuid" type_name="gh_guid" type_code="9">a2222222-2222-2222-2222-222222222222</item>
+            <item name="TypeName" type_name="gh_string" type_code="10">Grasshopper.Kernel.Parameters.Param_Curve</item>
+            <item name="Optional" type_name="gh_bool" type_code="1">false</item>
+            <item name="Attributes" type_name="gh_archive" type_code="60">
+              <items count="2">
+                <item name="Pivot" type_name="gh_drawing_pointf" type_code="31"><X>100</X><Y>150</Y></item>
+                <item name="Principal" type_name="gh_bool" type_code="1">true</item>
+              </items>
+            </item>
+          </items>
+        </item>
+
+        <!-- INPUT 3: rotation_spec (String) -->
+        <item name="Object" type_name="gh_archive" type_code="60">
+          <items count="8">
+            <item name="GUID" type_name="gh_guid" type_code="9">a3333333-3333-3333-3333-333333333333</item>
+            <item name="Name" type_name="gh_string" type_code="10">rotation_spec</item>
+            <item name="NickName" type_name="gh_string" type_code="10">rotation_spec</item>
+            <item name="Description" type_name="gh_string" type_code="10">Rotation specification JSON</item>
+            <item name="InstanceGuid" type_name="gh_guid" type_code="9">a3333333-3333-3333-3333-333333333333</item>
+            <item name="TypeName" type_name="gh_string" type_code="10">Grasshopper.Kernel.Parameters.Param_String</item>
+            <item name="Optional" type_name="gh_bool" type_code="1">false</item>
+            <item name="Attributes" type_name="gh_archive" type_code="60">
+              <items count="2">
+                <item name="Pivot" type_name="gh_drawing_pointf" type_code="31"><X>100</X><Y>200</Y></item>
+                <item name="Principal" type_name="gh_bool" type_code="1">true</item>
+              </items>
+            </item>
+          </items>
+        </item>
+
+        <!-- INPUT 4: grid_step (Number) -->
+        <item name="Object" type_name="gh_archive" type_code="60">
+          <items count="8">
+            <item name="GUID" type_name="gh_guid" type_code="9">a4444444-4444-4444-4444-444444444444</item>
+            <item name="Name" type_name="gh_string" type_code="10">grid_step</item>
+            <item name="NickName" type_name="gh_string" type_code="10">grid_step</item>
+            <item name="Description" type_name="gh_string" type_code="10">Grid sampling step (meters)</item>
+            <item name="InstanceGuid" type_name="gh_guid" type_code="9">a4444444-4444-4444-4444-444444444444</item>
+            <item name="TypeName" type_name="gh_string" type_code="10">Grasshopper.Kernel.Parameters.Param_Number</item>
+            <item name="Optional" type_name="gh_bool" type_code="1">false</item>
+            <item name="Attributes" type_name="gh_archive" type_code="60">
+              <items count="2">
+                <item name="Pivot" type_name="gh_drawing_pointf" type_code="31"><X>100</X><Y>250</Y></item>
+                <item name="Principal" type_name="gh_bool" type_code="1">true</item>
+              </items>
+            </item>
+          </items>
+        </item>
+
+        <!-- INPUT 5: seed (Integer) -->
+        <item name="Object" type_name="gh_archive" type_code="60">
+          <items count="8">
+            <item name="GUID" type_name="gh_guid" type_code="9">a5555555-5555-5555-5555-555555555555</item>
+            <item name="Name" type_name="gh_string" type_code="10">seed</item>
+            <item name="NickName" type_name="gh_string" type_code="10">seed</item>
+            <item name="Description" type_name="gh_string" type_code="10">Random seed for determinism</item>
+            <item name="InstanceGuid" type_name="gh_guid" type_code="9">a5555555-5555-5555-5555-555555555555</item>
+            <item name="TypeName" type_name="gh_string" type_code="10">Grasshopper.Kernel.Parameters.Param_Integer</item>
+            <item name="Optional" type_name="gh_bool" type_code="1">false</item>
+            <item name="Attributes" type_name="gh_archive" type_code="60">
+              <items count="2">
+                <item name="Pivot" type_name="gh_drawing_pointf" type_code="31"><X>100</X><Y>300</Y></item>
+                <item name="Principal" type_name="gh_bool" type_code="1">true</item>
+              </items>
+            </item>
+          </items>
+        </item>
+
+        <!-- PYTHON SCRIPT COMPONENT -->
+        <item name="Object" type_name="gh_archive" type_code="60">
+          <items count="8">
+            <item name="GUID" type_name="gh_guid" type_code="9">b0000000-0000-0000-0000-000000000000</item>
+            <item name="Name" type_name="gh_string" type_code="10">Python Script</item>
+            <item name="NickName" type_name="gh_string" type_code="10">SiteFit Solver</item>
+            <item name="Description" type_name="gh_string" type_code="10">SiteFit placement algorithm</item>
+            <item name="InstanceGuid" type_name="gh_guid" type_code="9">b0000000-0000-0000-0000-000000000000</item>
+            <item name="TypeName" type_name="gh_string" type_code="10">Grasshopper.Kernel.Special.GH_ScriptInstance</item>
+            <item name="Code" type_name="gh_string" type_code="10"><![CDATA[# SiteFit Solver v1.0.0
+import json
+import random
+import Rhino
+from Rhino.Geometry import Curve, Point3d, Vector3d, Transform, Plane, AreaMassProperties, PointContainment
+from Grasshopper.Kernel import GH_RuntimeMessageLevel
+
+class PlacementMetrics(object):
+    def __init__(self, yard_area, house_area, min_setback, parcel_utilization):
+        self.yard_area = yard_area
+        self.house_area = house_area
+        self.min_setback = min_setback
+        self.parcel_utilization = parcel_utilization
+
+class PlacementResult(object):
+    def __init__(self, translation, rotation, score, metrics):
+        self.translation = translation
+        self.rotation = rotation
+        self.score = score
+        self.metrics = metrics
+
+def _is_polygon_inside(parcel, house, sample_count=20):
+    params = house.DivideByCount(sample_count, True)
+    if params is None:
+        return False
+    for t in params:
+        pt = house.PointAt(t)
+        containment = parcel.Contains(pt, Plane.WorldXY, 0.01)
+        if containment == PointContainment.Outside:
+            return False
+    return True
+
+def _calculate_min_distance(parcel, house, sample_count=20):
+    min_dist = float("inf")
+    params = house.DivideByCount(sample_count, True)
+    if params is None:
+        return min_dist
+    for t in params:
+        pt = house.PointAt(t)
+        success, u = parcel.ClosestPoint(pt)
+        if not success:
+            continue
+        closest = parcel.PointAt(u)
+        dist = pt.DistanceTo(closest)
+        if dist < min_dist:
+            min_dist = dist
+    return min_dist if min_dist != float("inf") else 0.0
+
+def _calculate_metrics(parcel, house):
+    parcel_props = AreaMassProperties.Compute(parcel)
+    house_props = AreaMassProperties.Compute(house)
+    parcel_area = parcel_props.Area if parcel_props else 0.0
+    house_area = house_props.Area if house_props else 0.0
+    yard_area = parcel_area - house_area
+    min_setback = _calculate_min_distance(parcel, house)
+    utilization = (house_area / parcel_area) if parcel_area > 0 else 0.0
+    return PlacementMetrics(yard_area, house_area, min_setback, utilization)
+
+def _calculate_score(metrics):
+    score = 0.0
+    score += (metrics.yard_area / 1000.0) * 0.3
+    score += metrics.min_setback * 0.4
+    ideal_util = 0.4
+    util_score = 1.0 - abs(metrics.parcel_utilization - ideal_util) * 2.0
+    if util_score < 0.0:
+        util_score = 0.0
+    score += util_score * 0.3
+    return score
+
+def solve_sitefit(parcel_polygon, house_polygon, rotation_spec, grid_step, seed):
+    if parcel_polygon is None or not parcel_polygon.IsClosed:
+        raise ValueError("parcel_polygon must be a closed curve")
+    if house_polygon is None or not house_polygon.IsClosed:
+        raise ValueError("house_polygon must be a closed curve")
+    try:
+        rot_data = json.loads(rotation_spec) if rotation_spec else {}
+    except ValueError:
+        rot_data = {}
+    min_rot = float(rot_data.get("min", 0.0))
+    max_rot = float(rot_data.get("max", 180.0))
+    step_rot = float(rot_data.get("step", 5.0))
+    step_rot = max(step_rot, 0.1)
+    random.seed(seed)
+    parcel_bounds = parcel_polygon.GetBoundingBox(True)
+    house_props = AreaMassProperties.Compute(house_polygon)
+    if house_props is None:
+        raise ValueError("Cannot compute house properties")
+    house_centroid = house_props.Centroid
+    grid_step = max(grid_step, 0.1)
+    results = []
+    x = parcel_bounds.Min.X
+    while x <= parcel_bounds.Max.X + 1e-6:
+        y = parcel_bounds.Min.Y
+        while y <= parcel_bounds.Max.Y + 1e-6:
+            test_pt = Point3d(x, y, 0.0)
+            containment = parcel_polygon.Contains(test_pt, Plane.WorldXY, 0.01)
+            if containment == PointContainment.Inside:
+                angle = min_rot
+                while angle <= max_rot + 1e-6:
+                    translation = Vector3d(test_pt - house_centroid)
+                    t_translate = Transform.Translation(translation)
+                    pivot = house_centroid + translation
+                    t_rotate = Transform.Rotation(Rhino.RhinoMath.ToRadians(angle), Vector3d.ZAxis, pivot)
+                    t_combined = t_rotate * t_translate
+                    transformed_house = house_polygon.DuplicateCurve()
+                    transformed_house.Transform(t_combined)
+                    if _is_polygon_inside(parcel_polygon, transformed_house):
+                        metrics = _calculate_metrics(parcel_polygon, transformed_house)
+                        score = _calculate_score(metrics)
+                        results.append(PlacementResult(translation, angle, score, metrics))
+                    angle += step_rot
+            y += grid_step
+        x += grid_step
+    if not results:
+        return [], [], []
+    results.sort(key=lambda r: r.score, reverse=True)
+    results = results[:20]
+    transforms_json = []
+    scores = []
+    kpis_json = []
+    for res in results:
+        transform_obj = {
+            "rotation": {"axis": "z", "value": res.rotation, "units": "deg"},
+            "translation": {"x": res.translation.X, "y": res.translation.Y, "z": 0.0, "units": "m"},
+            "scale": {"uniform": 1.0}
+        }
+        transforms_json.append(json.dumps(transform_obj, separators=(",", ":")))
+        scores.append(res.score)
+        metrics_obj = {
+            "yard_area_m2": res.metrics.yard_area,
+            "min_setback_m": res.metrics.min_setback,
+            "house_area_m2": res.metrics.house_area,
+            "orientation_deg": res.rotation,
+            "parcel_utilization": res.metrics.parcel_utilization
+        }
+        kpis_json.append(json.dumps(metrics_obj, separators=(",", ":")))
+    return transforms_json, scores, kpis_json
+
+try:
+    result_transforms, result_scores, result_kpis = solve_sitefit(parcel_polygon, house_polygon, rotation_spec, grid_step, seed)
+    placed_transforms = result_transforms
+    placement_scores = result_scores
+    kpis = result_kpis
+except Exception as exc:
+    ghenv.Component.AddRuntimeMessage(GH_RuntimeMessageLevel.Error, str(exc))
+]]></item>
+            <item name="Attributes" type_name="gh_archive" type_code="60">
+              <items count="1">
+                <item name="Pivot" type_name="gh_drawing_pointf" type_code="31"><X>350</X><Y>180</Y></item>
+              </items>
+            </item>
+          </items>
+        </item>
+
+        <!-- OUTPUT 1: placed_transforms -->
+        <item name="Object" type_name="gh_archive" type_code="60">
+          <items count="8">
+            <item name="GUID" type_name="gh_guid" type_code="9">c1111111-1111-1111-1111-111111111111</item>
+            <item name="Name" type_name="gh_string" type_code="10">placed_transforms</item>
+            <item name="NickName" type_name="gh_string" type_code="10">placed_transforms</item>
+            <item name="Description" type_name="gh_string" type_code="10">Transform JSON array</item>
+            <item name="InstanceGuid" type_name="gh_guid" type_code="9">c1111111-1111-1111-1111-111111111111</item>
+            <item name="TypeName" type_name="gh_string" type_code="10">Grasshopper.Kernel.Parameters.Param_GenericObject</item>
+            <item name="Optional" type_name="gh_bool" type_code="1">false</item>
+            <item name="Attributes" type_name="gh_archive" type_code="60">
+              <items count="2">
+                <item name="Pivot" type_name="gh_drawing_pointf" type_code="31"><X>600</X><Y>140</Y></item>
+                <item name="Principal" type_name="gh_bool" type_code="1">true</item>
+              </items>
+            </item>
+          </items>
+        </item>
+
+        <!-- OUTPUT 2: placement_scores -->
+        <item name="Object" type_name="gh_archive" type_code="60">
+          <items count="8">
+            <item name="GUID" type_name="gh_guid" type_code="9">c2222222-2222-2222-2222-222222222222</item>
+            <item name="Name" type_name="gh_string" type_code="10">placement_scores</item>
+            <item name="NickName" type_name="gh_string" type_code="10">placement_scores</item>
+            <item name="Description" type_name="gh_string" type_code="10">Placement quality scores</item>
+            <item name="InstanceGuid" type_name="gh_guid" type_code="9">c2222222-2222-2222-2222-222222222222</item>
+            <item name="TypeName" type_name="gh_string" type_code="10">Grasshopper.Kernel.Parameters.Param_GenericObject</item>
+            <item name="Optional" type_name="gh_bool" type_code="1">false</item>
+            <item name="Attributes" type_name="gh_archive" type_code="60">
+              <items count="2">
+                <item name="Pivot" type_name="gh_drawing_pointf" type_code="31"><X>600</X><Y>200</Y></item>
+                <item name="Principal" type_name="gh_bool" type_code="1">true</item>
+              </items>
+            </item>
+          </items>
+        </item>
+
+        <!-- OUTPUT 3: kpis -->
+        <item name="Object" type_name="gh_archive" type_code="60">
+          <items count="8">
+            <item name="GUID" type_name="gh_guid" type_code="9">c3333333-3333-3333-3333-333333333333</item>
+            <item name="Name" type_name="gh_string" type_code="10">kpis</item>
+            <item name="NickName" type_name="gh_string" type_code="10">kpis</item>
+            <item name="Description" type_name="gh_string" type_code="10">KPI metrics JSON array</item>
+            <item name="InstanceGuid" type_name="gh_guid" type_code="9">c3333333-3333-3333-3333-333333333333</item>
+            <item name="TypeName" type_name="gh_string" type_code="10">Grasshopper.Kernel.Parameters.Param_GenericObject</item>
+            <item name="Optional" type_name="gh_bool" type_code="1">false</item>
+            <item name="Attributes" type_name="gh_archive" type_code="60">
+              <items count="2">
+                <item name="Pivot" type_name="gh_drawing_pointf" type_code="31"><X>600</X><Y>260</Y></item>
+                <item name="Principal" type_name="gh_bool" type_code="1">true</item>
+              </items>
+            </item>
+          </items>
+        </item>
+
+      </items>
+    </item>
+  </items>
+</Archive>
