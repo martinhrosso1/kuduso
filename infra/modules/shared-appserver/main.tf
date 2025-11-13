@@ -93,6 +93,26 @@ resource "azurerm_container_app" "appserver" {
         value = "/app/contracts"
       }
       
+      env {
+        name  = "USE_COMPUTE"
+        value = tostring(var.use_compute)
+      }
+      
+      env {
+        name  = "TIMEOUT_MS"
+        value = tostring(var.timeout_ms)
+      }
+      
+      env {
+        name  = "COMPUTE_DEFINITIONS_PATH"
+        value = var.compute_definitions_path
+      }
+      
+      env {
+        name  = "LOG_LEVEL"
+        value = var.log_level
+      }
+      
       # Database connection string from Key Vault
       env {
         name        = "DATABASE_URL"

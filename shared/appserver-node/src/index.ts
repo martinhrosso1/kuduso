@@ -3,6 +3,8 @@ import cors from 'cors';
 import { randomUUID } from 'crypto';
 import { validateInputs, validateOutputs } from './validate.js';
 import { mockSolve } from './mockSolver.js';
+import { computeSolve } from './computeSolver.js';
+import { checkComputeHealth } from './rhinoComputeClient.js';
 import { logger } from './logger.js';
 
 const app = express();
@@ -19,8 +21,26 @@ app.get('/health', (req: Request, res: Response) => {
 });
 
 // Readiness check
-app.get('/ready', (req: Request, res: Response) => {
-  res.json({ status: 'ready', service: 'appserver-node' });
+app.get('/ready', async (req: Request, res: Response) => {
+  let computeHealthy = true;
+  
+  if (USE_COMPUTE) {
+    computeHealthy = await checkComputeHealth();
+    if (!computeHealthy) {
+      return res.status(503).json({ 
+        status: 'not_ready', 
+        service: 'appserver-node',
+        reason: 'Compute server unavailable'
+      });
+    }
+  }
+  
+  res.json({ 
+    status: 'ready', 
+    service: 'appserver-node',
+    mode: USE_COMPUTE ? 'compute' : 'mock',
+    compute_healthy: computeHealthy
+  });
 });
 
 // Main solve endpoint
@@ -39,8 +59,13 @@ app.post('/gh/:def\\::ver/solve', async (req: Request, res: Response) => {
     
     logger.debug({ cid, def, ver, event: 'inputs.validated' });
 
-    // Call mock solver (or real compute in future)
-    const result = await mockSolve(inputs, def, ver);
+    // Route to appropriate solver based on USE_COMPUTE flag
+    let result;
+    if (USE_COMPUTE) {
+      result = await computeSolve(inputs, def, ver, cid);
+    } else {
+      result = await mockSolve(inputs, def, ver);
+    }
     
     logger.debug({ cid, def, ver, event: 'solve.complete', duration_ms: Date.now() - startTime });
 
@@ -53,7 +78,8 @@ app.post('/gh/:def\\::ver/solve', async (req: Request, res: Response) => {
       ver, 
       event: 'solve.success', 
       duration_ms: Date.now() - startTime,
-      results_count: result.results?.length || 0
+      results_count: result.results?.length || 0,
+      mode: USE_COMPUTE ? 'compute' : 'mock'
     });
 
     res.status(200).json(result);

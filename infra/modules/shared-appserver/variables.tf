@@ -100,3 +100,27 @@ variable "enable_ingress" {
   type        = bool
   default     = false # Internal only by default
 }
+
+variable "use_compute" {
+  description = "Enable real Rhino.Compute (false = mock mode)"
+  type        = bool
+  default     = false
+}
+
+variable "timeout_ms" {
+  description = "Default timeout for compute calls in milliseconds"
+  type        = number
+  default     = 240000 # 4 minutes
+}
+
+variable "compute_definitions_path" {
+  description = "Path to Grasshopper definitions on Compute VM"
+  type        = string
+  default     = "C:\\\\compute" # Windows path with escaped backslashes
+}
+
+variable "log_level" {
+  description = "Logging level (debug, info, warn, error)"
+  type        = string
+  default     = "info"
+}

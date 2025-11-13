@@ -30,6 +30,11 @@ COPY --from=builder /app/dist ./dist
 # Copy contracts directory (needed for schema validation)
 COPY contracts ./contracts
 
+# Ensure rhino3dm WASM files are accessible
+# The rhino3dm module in node_modules should already have the WASM files
+# from the npm ci step above, but we verify they exist
+RUN test -f node_modules/rhino3dm/rhino3dm.wasm || (echo "ERROR: rhino3dm WASM not found" && exit 1)
+
 # Expose port
 EXPOSE 8080
 

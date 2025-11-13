@@ -84,6 +84,19 @@ resource "azurerm_network_security_group" "main" {
     destination_address_prefix = "*"
   }
   
+  # Allow Rhino.Compute from Azure Container Apps
+  security_rule {
+    name                       = "AllowACAToRhinoCompute"
+    priority                   = 125
+    direction                  = "Inbound"
+    access                     = "Allow"
+    protocol                   = "Tcp"
+    source_port_range          = "*"
+    destination_port_range     = tostring(var.rhino_compute_port)
+    source_address_prefixes    = var.aca_outbound_ips
+    destination_address_prefix = "*"
+  }
+  
   # Allow Windows Admin Center from your IP
   security_rule {
     name                       = "AllowWindowsAdminCenter"

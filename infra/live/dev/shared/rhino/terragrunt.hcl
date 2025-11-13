@@ -25,6 +25,16 @@ dependency "gallery" {
   }
 }
 
+# Dependency on AppServer to get ACA outbound IPs
+dependency "appserver" {
+  config_path = "../appserver"
+  skip_outputs = false
+  
+  mock_outputs = {
+    outbound_ip_addresses = ["0.0.0.0"]
+  }
+}
+
 # Point to the rhino-vm module
 terraform {
   source = "../../../../modules/rhino-vm"
@@ -52,6 +62,9 @@ inputs = {
   # Update this with your current public IP in CIDR format (e.g., "178.40.216.159/32")
   # Or set via env var: export MY_PUBLIC_IP="178.40.216.159/32"
   allowed_source_ip = get_env("MY_PUBLIC_IP", "178.40.216.159/32")
+  
+  # Azure Container Apps outbound IPs (for AppServer → Rhino.Compute connectivity)
+  aca_outbound_ips = dependency.appserver.outputs.outbound_ip_addresses
   
   # Rhino.Compute
   rhino_compute_port = 8081

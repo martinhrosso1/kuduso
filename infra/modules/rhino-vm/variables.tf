@@ -44,6 +44,12 @@ variable "allowed_source_ip" {
   type        = string
 }
 
+variable "aca_outbound_ips" {
+  description = "Azure Container Apps outbound IP addresses (list)"
+  type        = list(string)
+  default     = []
+}
+
 variable "rhino_compute_port" {
   description = "Port for Rhino.Compute"
   type        = number

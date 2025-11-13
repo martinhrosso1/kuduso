@@ -37,7 +37,7 @@ inputs = {
   container_registry_server = dependency.core.outputs.acr_server
   
   # Image
-  app_image = "appserver-node:6282cdd" # With /ready endpoint and contracts included
+  app_image = "appserver-node:stage4-fix" # Stage 4: Rhino.Compute integration (with rhino3dm fix)
   
   # Key Vault
   key_vault_id  = dependency.core.outputs.key_vault_id
@@ -55,9 +55,12 @@ inputs = {
   target_port      = 8080
   enable_ingress   = false # Internal only - accessed by API/Worker apps
   
-  # Rhino.Compute
-  rhino_compute_url = "http://20.73.173.209:8081" # Real Rhino VM (use mock if not ready)
-  # rhino_compute_url = "http://mock-compute:8081" # Uncomment for mock
+  # Rhino.Compute Configuration
+  rhino_compute_url        = "http://52.148.197.239:8081"  # Real Rhino VM IP
+  use_compute              = true  # 🚀 ENABLED: Real Rhino.Compute integration!
+  timeout_ms               = 240000  # 4 minutes
+  compute_definitions_path = "C:\\\\compute"  # Windows path on VM
+  log_level                = "debug"  # Verbose logging for first run
   
   # Secrets (Key Vault secret names)
   database_connection_string_secret_name = "DATABASE-URL"
