@@ -79,35 +79,65 @@ export async function callGrasshopper(
 
     if (!response.ok) {
       const errorText = await response.text();
+      
+      // Try to parse as JSON for more details
+      let errorDetails = errorText;
+      try {
+        const errorJson = JSON.parse(errorText);
+        errorDetails = JSON.stringify(errorJson, null, 2);
+      } catch {
+        // Not JSON, use as-is
+      }
+      
       logger.error({
-        event: 'compute.error',
+        event: 'compute.http_error',
         cid: correlationId,
         status: response.status,
-        error: errorText
+        statusText: response.statusText,
+        contentType: response.headers.get('content-type'),
+        errorBody: errorDetails,
+        errorLength: errorText.length,
+        hasContent: errorText.length > 0
       });
 
       // Map Compute errors to appropriate HTTP codes
       if (response.status === 401 || response.status === 403) {
         throw new RhinoComputeError('Compute authentication failed', 502, { status: response.status });
       } else if (response.status >= 500) {
-        throw new RhinoComputeError('Compute server error', 503, { status: response.status, error: errorText });
+        throw new RhinoComputeError('Compute server error', 503, { status: response.status, error: errorDetails });
       } else {
-        throw new RhinoComputeError('Compute request failed', 422, { status: response.status, error: errorText });
+        throw new RhinoComputeError('Compute request failed', 422, { status: response.status, error: errorDetails });
       }
     }
 
     const result = (await response.json()) as GrasshopperResponse;
 
-    logger.debug({
-      event: 'compute.response',
+    logger.info({
+      event: 'compute.response_success',
       cid: correlationId,
-      output_params: result.values.map(v => v.ParamName),
-      warnings: result.warnings?.length || 0,
-      errors: result.errors?.length || 0
+      output_params: result.values?.map(v => v.ParamName) || [],
+      warnings_count: result.warnings?.length || 0,
+      errors_count: result.errors?.length || 0,
+      has_values: !!result.values && result.values.length > 0
     });
 
-    // If Compute returned errors, treat as domain error
+    // Log warnings if present
+    if (result.warnings && result.warnings.length > 0) {
+      logger.warn({
+        event: 'compute.grasshopper_warnings',
+        cid: correlationId,
+        warnings: result.warnings
+      });
+    }
+
+    // If Compute returned errors, log and throw
     if (result.errors && result.errors.length > 0) {
+      logger.error({
+        event: 'compute.grasshopper_errors',
+        cid: correlationId,
+        errors: result.errors
+      });
+      
       throw new RhinoComputeError(
         'Grasshopper execution failed',
         422,

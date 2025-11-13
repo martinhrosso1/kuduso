@@ -37,7 +37,7 @@ inputs = {
   container_registry_server = dependency.core.outputs.acr_server
   
   # Image
-  app_image = "appserver-node:stage4-fix" # Stage 4: Rhino.Compute integration (with rhino3dm fix)
+  app_image = "appserver-node:stage4-final" # Stage 4: Rhino.Compute integration (FIXED ✅)
   
   # Key Vault
   key_vault_id  = dependency.core.outputs.key_vault_id
@@ -59,7 +59,7 @@ inputs = {
   rhino_compute_url        = "http://52.148.197.239:8081"  # Real Rhino VM IP
   use_compute              = true  # 🚀 ENABLED: Real Rhino.Compute integration!
   timeout_ms               = 240000  # 4 minutes
-  compute_definitions_path = "C:\\\\compute"  # Windows path on VM
+  compute_definitions_path = "C:\\compute"  # Windows path on VM (HCL string)
   log_level                = "debug"  # Verbose logging for first run
   
   # Secrets (Key Vault secret names)

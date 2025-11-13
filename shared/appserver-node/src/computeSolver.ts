@@ -16,8 +16,8 @@ const COMPUTE_DEFINITIONS_PATH = process.env.COMPUTE_DEFINITIONS_PATH || 'C:\\\\
  * Build the full path to the .ghx file on the Compute VM
  */
 function buildDefinitionPath(definition: string, version: string): string {
-  // Windows path with escaped backslashes for JSON
-  const ghxPath = `${COMPUTE_DEFINITIONS_PATH}\\\\${definition}\\\\${version}\\\\ghlogic.ghx`;
+  // Windows path - COMPUTE_DEFINITIONS_PATH already has escaped backslashes
+  const ghxPath = `${COMPUTE_DEFINITIONS_PATH}\\${definition}\\${version}\\ghlogic.ghx`;
   return ghxPath;
 }
 
@@ -58,7 +58,12 @@ export async function computeSolve(
       event: 'compute.grasshopper.request',
       cid: correlationId,
       algo: ghPath,
-      timeout_ms
+      timeout_ms,
+      input_count: ghInputs.length,
+      input_params: ghInputs.map(v => ({
+        param: v.ParamName,
+        path_count: Object.keys(v.InnerTree).length
+      }))
     });
 
     // Step 4: Call Rhino.Compute with timeout

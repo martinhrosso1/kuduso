@@ -24,19 +24,7 @@ let rhinoModule: any = null;
  */
 async function initRhino() {
   if (!rhinoModule) {
-    logger.debug({ 
-      event: 'rhino3dm.init_start', 
-      type: typeof rhino3dm,
-      is_function: typeof rhino3dm === 'function',
-      keys: typeof rhino3dm === 'object' ? Object.keys(rhino3dm).slice(0, 5) : []
-    });
-    
-    if (typeof rhino3dm !== 'function') {
-      throw new Error(`rhino3dm is not a function (got ${typeof rhino3dm}). Keys: ${typeof rhino3dm === 'object' ? Object.keys(rhino3dm).join(', ') : 'N/A'}`);
-    }
-    
     rhinoModule = await rhino3dm();
-    logger.debug({ event: 'rhino3dm.init_success' });
   }
   return rhinoModule;
 }
@@ -93,8 +81,8 @@ async function coordinatesToCurve(coords: number[][]): Promise<any> {
     polyline.add(first[0], first[1], 0);
   }
   
-  // Create a PolylineCurve
-  const curve = rhino.PolylineCurve.createFromPolyline(polyline);
+  // Create a PolylineCurve using constructor (not a static method)
+  const curve = new rhino.PolylineCurve(polyline);
   
   return curve;
 }
