@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "version": "1.1.0",
+  "description": "No plugins required for debug version",
+  "runtime": {
+    "rhino": {
+      "version": "8.x",
+      "minimum": "8.0.0"
+    },
+    "grasshopper": {
+      "version": "8.x"
+    }
+  },
+  "plugins": []
+}
+

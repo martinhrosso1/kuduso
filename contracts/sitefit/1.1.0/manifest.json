@@ -1,0 +1,19 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "version": "1.1.0",
+  "description": "Minimal debug manifest",
+  "limits": {
+    "timeout_sec": 30,
+    "max_input_value": 1000
+  },
+  "runtime": {
+    "concurrency_class": "preview",
+    "priority": "normal"
+  },
+  "metadata": {
+    "created": "2025-11-21",
+    "purpose": "debug",
+    "author": "kuduso-team"
+  }
+}
+

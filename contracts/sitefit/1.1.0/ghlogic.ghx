@@ -1,0 +1,99 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Archive name="Root" type="GH_Archive">
+  <items count="3">
+    <item name="PluginVersion" type_name="gh_version" type_code="80">
+      <Major>1</Major>
+      <Minor>0</Minor>
+      <Revision>7</Revision>
+    </item>
+    <item name="DocumentHeader" type_name="gh_document_header" type_code="3000">
+      <value name="Guid">d6ad6ba0-1a3e-4a7f-9f56-8c7d6e5f4a3b</value>
+      <value name="GHVersion">1.0.0007</value>
+      <value name="GHCompatibleVersion">1.0.0007</value>
+      <value name="OriginalFileLocation">C:\</value>
+    </item>
+    <item name="DefinitionObjects" type_name="gh_group" type_code="60">
+      <items count="3">
+        <!--Input Number Slider-->
+        <item name="Object" index="0" type_name="gh_generic_param" type_code="1001">
+          <InstanceGuid>a1b2c3d4-e5f6-7890-abcd-ef1234567890</InstanceGuid>
+          <Name>input_value</Name>
+          <NickName>input_value</NickName>
+          <Description>Input number value</Description>
+          <InstanceGuid_Selected>false</InstanceGuid_Selected>
+          <Optional>false</Optional>
+          <Source_Count>0</Source_Count>
+          <TypeHintID>3</TypeHintID>
+          <DataType>3</DataType>
+          <PersistentData>
+            <items count="1">
+              <item index="0" type_name="gh_double" type_code="6">42</item>
+            </items>
+          </PersistentData>
+          <Attributes>
+            <Bounds>X=50,Y=50,W=100,H=20</Bounds>
+            <Pivot>X=100,Y=60</Pivot>
+          </Attributes>
+        </item>
+        <!--Addition Component: adds 10 to input-->
+        <item name="Object" index="1" type_name="gh_component_addition" type_code="59">
+          <InstanceGuid>b2c3d4e5-f678-9012-3456-789012345678</InstanceGuid>
+          <Name>Addition</Name>
+          <NickName>A+B</NickName>
+          <Description>Mathematical addition</Description>
+          <Category>Maths</Category>
+          <SubCategory>Operators</SubCategory>
+          <Exposure>2</Exposure>
+          <InputCount>2</InputCount>
+          <Input>
+            <Name>A</Name>
+            <NickName>A</NickName>
+            <Description>First item</Description>
+            <TypeHintID>3</TypeHintID>
+            <Source>a1b2c3d4-e5f6-7890-abcd-ef1234567890;0</Source>
+          </Input>
+          <Input>
+            <Name>B</Name>
+            <NickName>B</NickName>
+            <Description>Second item</Description>
+            <TypeHintID>3</TypeHintID>
+            <PersistentData>
+              <items count="1">
+                <item index="0" type_name="gh_double" type_code="6">10</item>
+              </items>
+            </PersistentData>
+          </Input>
+          <OutputCount>1</OutputCount>
+          <Output>
+            <Name>Result</Name>
+            <NickName>R</NickName>
+            <Description>Result of addition</Description>
+            <TypeHintID>3</TypeHintID>
+          </Output>
+          <Attributes>
+            <Bounds>X=250,Y=50,W=60,H=44</Bounds>
+            <Pivot>X=280,Y=72</Pivot>
+          </Attributes>
+        </item>
+        <!--Output Parameter-->
+        <item name="Object" index="2" type_name="gh_generic_param" type_code="1001">
+          <InstanceGuid>c3d4e5f6-7890-1234-5678-901234567890</InstanceGuid>
+          <Name>output_value</Name>
+          <NickName>output_value</NickName>
+          <Description>Output result</Description>
+          <InstanceGuid_Selected>false</InstanceGuid_Selected>
+          <Optional>false</Optional>
+          <Source_Count>1</Source_Count>
+          <Source>b2c3d4e5-f678-9012-3456-789012345678;0</Source>
+          <TypeHintID>3</TypeHintID>
+          <DataType>3</DataType>
+          <Attributes>
+            <Bounds>X=400,Y=50,W=100,H=20</Bounds>
+            <Pivot>X=450,Y=60</Pivot>
+          </Attributes>
+        </item>
+      </items>
+    </item>
+  </items>
+</Archive>
+

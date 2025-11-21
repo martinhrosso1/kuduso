@@ -1,0 +1,16 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://kuduso.com/schemas/sitefit/1.1.0/outputs.json",
+  "title": "SiteFit Debug Outputs v1.1.0",
+  "description": "Minimal debug version - single number output",
+  "type": "object",
+  "required": ["result"],
+  "properties": {
+    "result": {
+      "type": "number",
+      "description": "The output number (input + 10)"
+    }
+  },
+  "additionalProperties": false
+}
+
