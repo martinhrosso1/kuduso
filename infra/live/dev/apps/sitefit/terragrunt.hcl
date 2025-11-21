@@ -57,7 +57,7 @@ inputs = {
   api_port         = 8000
   
   # Worker Configuration
-  worker_image        = "worker-fastapi:8fbd6d4"
+  worker_image        = "worker-fastapi:504-retry-fix"
   worker_cpu          = "0.5"
   worker_memory       = "1Gi"
   worker_min_replicas = 0  # Scale to zero when no messages

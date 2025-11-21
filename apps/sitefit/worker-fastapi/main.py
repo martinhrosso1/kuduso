@@ -80,6 +80,18 @@ class JobProcessor:
                     "job_id": job_id,
                     "attempts": attempts
                 }))
+                
+                # Update job status to failed
+                db.update_job_error(
+                    job_id=job_id,
+                    error={
+                        "type": "max_attempts_exceeded",
+                        "message": f"Job exceeded maximum attempts ({MAX_ATTEMPTS})",
+                        "attempts": attempts,
+                        "timestamp": datetime.utcnow().isoformat()
+                    }
+                )
+                
                 # Dead letter the message
                 self.receiver.dead_letter_message(
                     message,
@@ -152,8 +164,12 @@ class JobProcessor:
                 
             except httpx.HTTPStatusError as e:
                 # HTTP error from AppServer
-                if e.response.status_code in [429, 503]:
+                if e.response.status_code in [429, 502, 503, 504]:
                     # Transient error - abandon for retry
+                    # 429: Rate limited
+                    # 502: Bad Gateway (upstream unavailable)
+                    # 503: Service Unavailable (AppServer overloaded)
+                    # 504: Gateway Timeout (AppServer timed out waiting for Rhino.Compute)
                     logger.warning(json.dumps({
                         "event": "job.transient_error",
                         "job_id": job_id,
