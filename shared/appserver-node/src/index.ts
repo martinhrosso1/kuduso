@@ -51,34 +51,66 @@ app.post('/gh/:def\\::ver/solve', async (req: Request, res: Response) => {
   const { def, ver } = req.params;
   const startTime = Date.now();
 
-  logger.info({ cid, def, ver, event: 'solve.start' });
+  logger.info({ 
+    cid, 
+    def, 
+    ver, 
+    event: 'solve.start',
+    request_size: JSON.stringify(req.body).length,
+    input_keys: Object.keys(req.body || {}),
+    mode: USE_COMPUTE ? 'compute' : 'mock'
+  });
 
   try {
     // Validate inputs against contract schema
+    const validationStart = Date.now();
     const inputs = validateInputs(def, ver, req.body);
     
-    logger.debug({ cid, def, ver, event: 'inputs.validated' });
+    logger.debug({ 
+      cid, 
+      def, 
+      ver, 
+      event: 'inputs.validated',
+      validation_ms: Date.now() - validationStart
+    });
 
     // Route to appropriate solver based on USE_COMPUTE flag
     let result;
     if (USE_COMPUTE) {
+      logger.debug({ cid, event: 'routing.compute' });
       result = await computeSolve(inputs, def, ver, cid);
     } else {
+      logger.debug({ cid, event: 'routing.mock' });
       result = await mockSolve(inputs, def, ver);
     }
     
-    logger.debug({ cid, def, ver, event: 'solve.complete', duration_ms: Date.now() - startTime });
+    logger.debug({ 
+      cid, 
+      def, 
+      ver, 
+      event: 'solve.complete', 
+      duration_ms: Date.now() - startTime 
+    });
 
     // Validate outputs against contract schema
+    const outputValidationStart = Date.now();
     validateOutputs(def, ver, result);
+    logger.debug({
+      cid,
+      event: 'outputs.validated',
+      validation_ms: Date.now() - outputValidationStart
+    });
+    
+    const duration_ms = Date.now() - startTime;
     
     logger.info({ 
       cid, 
       def, 
       ver, 
       event: 'solve.success', 
-      duration_ms: Date.now() - startTime,
-      results_count: result.results?.length || 0,
+      duration_ms,
+      output_keys: Object.keys(result),
+      response_size: JSON.stringify(result).length,
       mode: USE_COMPUTE ? 'compute' : 'mock'
     });
 
@@ -93,8 +125,10 @@ app.post('/gh/:def\\::ver/solve', async (req: Request, res: Response) => {
       ver, 
       event: 'solve.error', 
       error: error.message,
+      error_name: error.name,
       code,
-      duration_ms
+      duration_ms,
+      stack: error.stack?.split('\n').slice(0, 5) // First 5 lines
     });
 
     res.status(code).json({

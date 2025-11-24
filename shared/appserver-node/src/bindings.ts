@@ -124,14 +124,38 @@ export async function mapInputsToDataTree(
   ver: string,
   correlationId: string
 ): Promise<GrasshopperValue[]> {
-  logger.debug({ event: 'bindings.map_inputs', cid: correlationId, def, ver });
+  const startTime = Date.now();
+  
+  logger.debug({ 
+    event: 'bindings.map_inputs.start', 
+    cid: correlationId, 
+    def, 
+    ver,
+    input_keys: Object.keys(inputs),
+    input_size: JSON.stringify(inputs).length
+  });
 
   const bindings = loadBindings(def, ver);
   const values: GrasshopperValue[] = [];
 
+  logger.debug({
+    event: 'bindings.loaded',
+    cid: correlationId,
+    input_bindings_count: bindings.inputs.length,
+    output_bindings_count: bindings.outputs.length
+  });
+
   await initRhino(); // Ensure rhino3dm is loaded
 
   for (const binding of bindings.inputs) {
+    logger.debug({
+      event: 'bindings.processing_input',
+      cid: correlationId,
+      param: binding.gh_param,
+      type: binding.type,
+      jsonpath: binding.jsonpath
+    });
+
     // Extract value from JSON using JSONPath
     const result = JSONPath({ path: binding.jsonpath, json: inputs, wrap: false });
     
@@ -140,10 +164,20 @@ export async function mapInputsToDataTree(
         event: 'bindings.missing_input',
         cid: correlationId,
         param: binding.gh_param,
-        jsonpath: binding.jsonpath
+        jsonpath: binding.jsonpath,
+        available_keys: Object.keys(inputs)
       });
       continue;
     }
+
+    logger.debug({
+      event: 'bindings.extracted_value',
+      cid: correlationId,
+      param: binding.gh_param,
+      value_type: typeof result,
+      is_array: Array.isArray(result),
+      value_length: Array.isArray(result) ? result.length : undefined
+    });
 
     let ghValue: GrasshopperValue;
 
@@ -209,9 +243,20 @@ export async function mapInputsToDataTree(
       event: 'bindings.mapped_input',
       cid: correlationId,
       param: binding.gh_param,
-      type: ghValue.InnerTree["0"][0].type
+      gh_type: ghValue.InnerTree["0"][0].type,
+      binding_type: binding.type,
+      data_size: JSON.stringify(ghValue).length
     });
   }
+
+  const duration = Date.now() - startTime;
+  
+  logger.info({
+    event: 'bindings.map_inputs.complete',
+    cid: correlationId,
+    mapped_count: values.length,
+    duration_ms: duration
+  });
 
   return values;
 }
@@ -271,9 +316,24 @@ export function mapDataTreeToOutputs(
   ver: string,
   correlationId: string
 ): any {
-  logger.debug({ event: 'bindings.map_outputs', cid: correlationId, def, ver });
+  const startTime = Date.now();
+  
+  logger.debug({ 
+    event: 'bindings.map_outputs.start', 
+    cid: correlationId, 
+    def, 
+    ver,
+    gh_output_params: ghOutput.values?.map((v: any) => v.ParamName) || []
+  });
 
   const bindings = loadBindings(def, ver);
+  
+  logger.debug({
+    event: 'bindings.output_bindings_loaded',
+    cid: correlationId,
+    expected_params: bindings.outputs.map(o => o.gh_param),
+    output_paths: bindings.outputs.map(o => o.output_path)
+  });
   
   // Extract output values by parameter name
   const outputMap: { [key: string]: any[] } = {};
@@ -281,6 +341,14 @@ export function mapDataTreeToOutputs(
   for (const value of ghOutput.values) {
     const paramName = value.ParamName;
     const branch = value.InnerTree["0"] || [];
+    
+    logger.debug({
+      event: 'bindings.extracting_gh_output',
+      cid: correlationId,
+      param: paramName,
+      branch_size: branch.length,
+      item_types: branch.map((item: any) => item.type).slice(0, 3) // Log first 3 types
+    });
     
     // Extract data from each item in the branch
     const extractedData = branch.map((item: any) => item.data);
@@ -293,22 +361,42 @@ export function mapDataTreeToOutputs(
   for (const outputBinding of bindings.outputs) {
     const ghData = outputMap[outputBinding.gh_param] || [];
     
+    logger.debug({
+      event: 'bindings.processing_output',
+      cid: correlationId,
+      param: outputBinding.gh_param,
+      type: outputBinding.type,
+      output_path: outputBinding.output_path,
+      data_count: ghData.length,
+      sample_data: ghData.slice(0, 2) // Log first 2 items
+    });
+    
     // Type-driven conversion
     let processedData: any[];
     
     switch (outputBinding.type) {
       case 'json_string':
         // Parse JSON strings
-        processedData = ghData.map((item) => {
+        processedData = ghData.map((item, index) => {
           if (typeof item === 'string') {
             try {
-              return JSON.parse(item);
+              const parsed = JSON.parse(item);
+              logger.debug({
+                event: 'bindings.json_parsed',
+                cid: correlationId,
+                param: outputBinding.gh_param,
+                index,
+                parsed_keys: typeof parsed === 'object' ? Object.keys(parsed) : undefined
+              });
+              return parsed;
             } catch (e) {
               logger.warn({
                 event: 'bindings.parse_error',
                 cid: correlationId,
                 param: outputBinding.gh_param,
-                error: e instanceof Error ? e.message : String(e)
+                index,
+                error: e instanceof Error ? e.message : String(e),
+                raw_value: item.substring(0, 100) // Log first 100 chars
               });
               return item;
             }
@@ -323,21 +411,46 @@ export function mapDataTreeToOutputs(
       case 'boolean':
         // Use as-is
         processedData = ghData;
+        logger.debug({
+          event: 'bindings.primitive_type',
+          cid: correlationId,
+          param: outputBinding.gh_param,
+          type: outputBinding.type,
+          count: processedData.length
+        });
         break;
 
       default:
         // Unknown type: use as-is
         processedData = ghData;
+        logger.warn({
+          event: 'bindings.unknown_type',
+          cid: correlationId,
+          param: outputBinding.gh_param,
+          type: outputBinding.type
+        });
     }
 
     // Map to output path using JSONPath
+    logger.debug({
+      event: 'bindings.mapping_to_path',
+      cid: correlationId,
+      param: outputBinding.gh_param,
+      output_path: outputBinding.output_path,
+      processed_count: processedData.length
+    });
+    
     setValueByPath(result, outputBinding.output_path, processedData);
   }
 
+  const duration = Date.now() - startTime;
+  
   logger.info({
-    event: 'bindings.outputs_mapped',
+    event: 'bindings.map_outputs.complete',
     cid: correlationId,
-    output_keys: Object.keys(result)
+    output_keys: Object.keys(result),
+    result_size: JSON.stringify(result).length,
+    duration_ms: duration
   });
 
   return result;
