@@ -37,7 +37,7 @@ inputs = {
   container_registry_server = dependency.core.outputs.acr_server
   
   # Image
-  app_image = "appserver-node:stage4-final" # Stage 4: Rhino.Compute integration (FIXED ✅)
+  app_image = "appserver-node:v1.1.0-test3" # Fixed manifest timeout_sec location
   
   # Key Vault
   key_vault_id  = dependency.core.outputs.key_vault_id

@@ -6,26 +6,31 @@
     {
       "jsonpath": "$.parcel.coordinates",
       "gh_param": "parcel_polygon",
+      "type": "geometry.curve",
       "description": "Parcel boundary as closed polygon"
     },
     {
       "jsonpath": "$.house.coordinates",
       "gh_param": "house_polygon",
+      "type": "geometry.curve",
       "description": "House footprint as closed polygon"
     },
     {
       "jsonpath": "$.rotation",
       "gh_param": "rotation_spec",
+      "type": "json_string",
       "description": "Rotation range specification (min, max, step)"
     },
     {
       "jsonpath": "$.grid_step",
       "gh_param": "grid_step",
+      "type": "number",
       "description": "Grid spacing for placement sampling"
     },
     {
       "jsonpath": "$.seed",
       "gh_param": "seed",
+      "type": "integer",
       "description": "Random seed for deterministic behavior"
     }
   ],
@@ -33,16 +38,19 @@
     {
       "gh_param": "placed_transforms",
       "output_path": "$.results[*].transform",
+      "type": "json_string",
       "description": "Array of placement transforms"
     },
     {
       "gh_param": "placement_scores",
       "output_path": "$.results[*].score",
+      "type": "number",
       "description": "Quality scores for each placement"
     },
     {
       "gh_param": "kpis",
       "output_path": "$.results[*].metrics",
+      "type": "json_string",
       "description": "Key performance indicators per placement"
     }
   ]

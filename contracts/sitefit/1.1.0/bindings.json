@@ -4,8 +4,8 @@
   "description": "Minimal debug bindings - single number in/out",
   "inputs": [
     {
+      "jsonpath": "$.value",
       "gh_param": "input_value",
-      "json_path": "$.value",
       "type": "number",
       "description": "Maps input number to Grasshopper parameter"
     }
@@ -13,7 +13,7 @@
   "outputs": [
     {
       "gh_param": "output_value",
-      "json_path": "$.result",
+      "output_path": "$.result",
       "type": "number",
       "description": "Maps Grasshopper output to result"
     }

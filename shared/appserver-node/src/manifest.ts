@@ -88,81 +88,9 @@ export function enforceManifest(
 
   const manifest = loadManifest(def, ver);
 
-  // Check CRS requirement
-  if (manifest.units?.crs_required && !inputs.crs) {
-    throw {
-      code: 400,
-      message: 'CRS is required by manifest but not provided',
-      details: [{ field: 'crs', requirement: 'required' }]
-    };
-  }
-
-  // Check seed requirement
-  if (manifest.determinism?.seed_required && inputs.seed === undefined) {
-    throw {
-      code: 400,
-      message: 'Seed is required by manifest for deterministic execution',
-      details: [{ field: 'seed', requirement: 'required' }]
-    };
-  }
-
-  // Check vertex limits
-  if (manifest.limits?.max_vertices) {
-    const parcelVertices = countVertices(inputs.parcel?.coordinates);
-    const houseVertices = countVertices(inputs.house?.coordinates);
-    const totalVertices = parcelVertices + houseVertices;
-
-    if (totalVertices > manifest.limits.max_vertices) {
-      logger.warn({
-        event: 'manifest.limit_exceeded',
-        cid: correlationId,
-        limit: 'max_vertices',
-        total: totalVertices,
-        max: manifest.limits.max_vertices
-      });
-      
-      throw {
-        code: 422,
-        message: 'Total vertices exceed manifest limit',
-        details: [
-          {
-            limit: 'max_vertices',
-            max: manifest.limits.max_vertices,
-            actual: totalVertices
-          }
-        ]
-      };
-    }
-  }
-
-  // Check sample limit (rotation samples)
-  if (manifest.limits?.max_samples && inputs.rotation) {
-    const { min = 0, max = 180, step = 5 } = inputs.rotation;
-    const rotationSamples = Math.ceil((max - min) / step);
-    
-    if (rotationSamples > manifest.limits.max_samples) {
-      logger.warn({
-        event: 'manifest.limit_exceeded',
-        cid: correlationId,
-        limit: 'max_samples',
-        samples: rotationSamples,
-        max: manifest.limits.max_samples
-      });
-      
-      throw {
-        code: 422,
-        message: 'Rotation samples exceed manifest limit',
-        details: [
-          {
-            limit: 'max_samples',
-            max: manifest.limits.max_samples,
-            actual: rotationSamples,
-            hint: 'Increase rotation step or reduce range'
-          }
-        ]
-      };
-    }
-  }
+  // Note: Contract-specific validations have been removed.
+  // These should be handled by JSON schema validation in the API layer.
+  // The manifest's role is limited to operational limits like timeout_sec.
 
   logger.info({
     event: 'manifest.validated',

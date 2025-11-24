@@ -35,11 +35,13 @@ interface BindingDefinition {
   inputs: Array<{
     jsonpath: string;
     gh_param: string;
+    type: string;
     description: string;
   }>;
   outputs: Array<{
     gh_param: string;
     output_path: string;
+    type: string;
     description: string;
   }>;
 }
@@ -145,29 +147,60 @@ export async function mapInputsToDataTree(
 
     let ghValue: GrasshopperValue;
 
-    // Special handling for different parameter types
-    if (binding.gh_param.includes('polygon') && Array.isArray(result) && Array.isArray(result[0])) {
-      // This is a polygon - convert to curve
-      const curve = await coordinatesToCurve(result);
-      const encoded = await encodeRhinoObject(curve);
-      ghValue = createTreeValue(binding.gh_param, 'Rhino.Geometry.PolylineCurve', JSON.parse(encoded));
-    } else if (binding.gh_param === 'rotation_spec') {
-      // Rotation spec is passed as JSON string
-      ghValue = createTreeValue(binding.gh_param, 'System.String', JSON.stringify(result));
-    } else if (typeof result === 'number') {
-      // Numeric values
-      if (Number.isInteger(result)) {
+    // Type-driven conversion (using binding.type from bindings.json)
+    switch (binding.type) {
+      case 'geometry.curve':
+        // Convert coordinate array to Rhino curve
+        if (!Array.isArray(result) || !Array.isArray(result[0])) {
+          throw {
+            code: 422,
+            message: `Invalid geometry data for ${binding.gh_param}`,
+            details: [{ param: binding.gh_param, expected: 'array of coordinates' }]
+          };
+        }
+        const curve = await coordinatesToCurve(result);
+        const encoded = await encodeRhinoObject(curve);
+        ghValue = createTreeValue(binding.gh_param, 'Rhino.Geometry.PolylineCurve', JSON.parse(encoded));
+        break;
+
+      case 'json_string':
+        // Stringify objects to JSON
+        ghValue = createTreeValue(binding.gh_param, 'System.String', JSON.stringify(result));
+        break;
+
+      case 'integer':
         ghValue = createTreeValue(binding.gh_param, 'System.Int32', result);
-      } else {
-        ghValue = createTreeValue(binding.gh_param, 'System.Double', result);
-      }
-    } else if (typeof result === 'string') {
-      ghValue = createTreeValue(binding.gh_param, 'System.String', result);
-    } else if (typeof result === 'boolean') {
-      ghValue = createTreeValue(binding.gh_param, 'System.Boolean', result);
-    } else {
-      // Default: stringify complex objects
-      ghValue = createTreeValue(binding.gh_param, 'System.String', JSON.stringify(result));
+        break;
+
+      case 'number':
+        // Use Int32 for integers, Double for floats
+        if (typeof result === 'number' && Number.isInteger(result)) {
+          ghValue = createTreeValue(binding.gh_param, 'System.Int32', result);
+        } else {
+          ghValue = createTreeValue(binding.gh_param, 'System.Double', result);
+        }
+        break;
+
+      case 'string':
+        ghValue = createTreeValue(binding.gh_param, 'System.String', result);
+        break;
+
+      case 'boolean':
+        ghValue = createTreeValue(binding.gh_param, 'System.Boolean', result);
+        break;
+
+      default:
+        // Fallback: infer type from JavaScript value
+        if (typeof result === 'number') {
+          ghValue = createTreeValue(binding.gh_param, Number.isInteger(result) ? 'System.Int32' : 'System.Double', result);
+        } else if (typeof result === 'string') {
+          ghValue = createTreeValue(binding.gh_param, 'System.String', result);
+        } else if (typeof result === 'boolean') {
+          ghValue = createTreeValue(binding.gh_param, 'System.Boolean', result);
+        } else {
+          // Complex objects: stringify
+          ghValue = createTreeValue(binding.gh_param, 'System.String', JSON.stringify(result));
+        }
     }
 
     values.push(ghValue);
@@ -184,7 +217,53 @@ export async function mapInputsToDataTree(
 }
 
 /**
- * Map Grasshopper output Data Trees back to JSON
+ * Set a value in an object using a JSONPath-like path
+ */
+function setValueByPath(obj: any, path: string, value: any): void {
+  // Handle array paths like $.results[*].transform
+  const arrayMatch = path.match(/^\$\.(\w+)\[\*\]\.(\w+)$/);
+  
+  if (arrayMatch) {
+    const [, arrayKey, itemKey] = arrayMatch;
+    if (!obj[arrayKey]) {
+      obj[arrayKey] = [];
+    }
+    // For array paths, value is an array of items
+    if (Array.isArray(value)) {
+      for (let i = 0; i < value.length; i++) {
+        if (!obj[arrayKey][i]) {
+          obj[arrayKey][i] = {};
+        }
+        obj[arrayKey][i][itemKey] = value[i];
+      }
+    }
+    return;
+  }
+
+  // Handle simple paths like $.result
+  const simpleMatch = path.match(/^\$\.(\w+)$/);
+  if (simpleMatch) {
+    const [, key] = simpleMatch;
+    // For simple paths, if value is an array with one item, unwrap it
+    if (Array.isArray(value) && value.length === 1) {
+      obj[key] = value[0];
+    } else {
+      obj[key] = value;
+    }
+    return;
+  }
+
+  // Fallback: direct assignment
+  logger.warn({
+    event: 'bindings.path_fallback',
+    path,
+    message: 'Unsupported path format, using direct assignment'
+  });
+  obj[path] = value;
+}
+
+/**
+ * Map Grasshopper output Data Trees back to JSON (contract-agnostic)
  */
 export function mapDataTreeToOutputs(
   ghOutput: any,
@@ -204,91 +283,63 @@ export function mapDataTreeToOutputs(
     const branch = value.InnerTree["0"] || [];
     
     // Extract data from each item in the branch
-    const extractedData = branch.map((item: any) => {
-      if (item.type === 'System.String') {
-        return item.data;
-      } else {
-        return item.data;
-      }
-    });
-    
+    const extractedData = branch.map((item: any) => item.data);
     outputMap[paramName] = extractedData;
   }
 
-  // Build result array from the three parallel arrays
-  const transforms = outputMap['placed_transforms'] || [];
-  const scores = outputMap['placement_scores'] || [];
-  const kpis = outputMap['kpis'] || [];
+  // Dynamically build output object using bindings
+  const result: any = {};
+  
+  for (const outputBinding of bindings.outputs) {
+    const ghData = outputMap[outputBinding.gh_param] || [];
+    
+    // Type-driven conversion
+    let processedData: any[];
+    
+    switch (outputBinding.type) {
+      case 'json_string':
+        // Parse JSON strings
+        processedData = ghData.map((item) => {
+          if (typeof item === 'string') {
+            try {
+              return JSON.parse(item);
+            } catch (e) {
+              logger.warn({
+                event: 'bindings.parse_error',
+                cid: correlationId,
+                param: outputBinding.gh_param,
+                error: e instanceof Error ? e.message : String(e)
+              });
+              return item;
+            }
+          }
+          return item;
+        });
+        break;
 
-  const results = [];
-  const maxLength = Math.max(transforms.length, scores.length, kpis.length);
+      case 'number':
+      case 'integer':
+      case 'string':
+      case 'boolean':
+        // Use as-is
+        processedData = ghData;
+        break;
 
-  for (let i = 0; i < maxLength; i++) {
-    const transformStr = transforms[i];
-    const score = scores[i];
-    const kpisStr = kpis[i];
-
-    let transform;
-    let metrics;
-
-    try {
-      transform = typeof transformStr === 'string' ? JSON.parse(transformStr) : transformStr;
-    } catch (e) {
-      logger.warn({
-        event: 'bindings.parse_error',
-        cid: correlationId,
-        field: 'transform',
-        index: i,
-        error: e instanceof Error ? e.message : String(e)
-      });
-      transform = {};
+      default:
+        // Unknown type: use as-is
+        processedData = ghData;
     }
 
-    try {
-      metrics = typeof kpisStr === 'string' ? JSON.parse(kpisStr) : kpisStr;
-    } catch (e) {
-      logger.warn({
-        event: 'bindings.parse_error',
-        cid: correlationId,
-        field: 'kpis',
-        index: i,
-        error: e instanceof Error ? e.message : String(e)
-      });
-      metrics = {};
-    }
-
-    results.push({
-      id: `result-${i}`,
-      transform,
-      score: score !== undefined ? score : 0,
-      metrics
-    });
+    // Map to output path using JSONPath
+    setValueByPath(result, outputBinding.output_path, processedData);
   }
 
   logger.info({
     event: 'bindings.outputs_mapped',
     cid: correlationId,
-    results_count: results.length
+    output_keys: Object.keys(result)
   });
 
-  return {
-    results,
-    artifacts: [], // Artifacts handling can be added later
-    metadata: {
-      definition: def,
-      version: ver,
-      units: {
-        length: 'm',
-        angle: 'deg'
-      },
-      generated_at: new Date().toISOString(),
-      engine: {
-        name: 'rhino.compute',
-        mode: 'batch'
-      },
-      cache_hit: false,
-      warnings: ghOutput.warnings || []
-    }
-  };
+  return result;
 }
 
