@@ -59,9 +59,8 @@ inputs = {
   admin_password  = get_env("RHINO_VM_PASSWORD", "ChangeMe123!_?_?") # Set via env var
   
   # Network Security
-  # Update this with your current public IP in CIDR format (e.g., "178.40.216.159/32")
-  # Or set via env var: export MY_PUBLIC_IP="178.40.216.159/32"
-  allowed_source_ip = get_env("MY_PUBLIC_IP", "178.40.216.159/32")
+  # Update this with your current local PC public IP in CIDR format
+  allowed_source_ip = get_env("MY_PUBLIC_IP", "178.41.184.249/32")
   
   # Azure Container Apps outbound IPs (for AppServer → Rhino.Compute connectivity)
   aca_outbound_ips = dependency.appserver.outputs.outbound_ip_addresses

@@ -37,7 +37,7 @@ inputs = {
   container_registry_server = dependency.core.outputs.acr_server
   
   # Image
-  app_image = "appserver-node:v1.1.0-test3" # Fixed manifest timeout_sec location
+  app_image = "appserver-node:contract-agnostic" # Full refactor: contract-agnostic + enhanced logging
   
   # Key Vault
   key_vault_id  = dependency.core.outputs.key_vault_id
@@ -56,7 +56,7 @@ inputs = {
   enable_ingress   = false # Internal only - accessed by API/Worker apps
   
   # Rhino.Compute Configuration
-  rhino_compute_url        = "http://52.148.197.239:8081"  # Real Rhino VM IP
+  rhino_compute_url        = "http://51.137.35.150:8081"  # Real Rhino VM IP (updated after recreation)
   use_compute              = true  # 🚀 ENABLED: Real Rhino.Compute integration!
   timeout_ms               = 240000  # 4 minutes
   compute_definitions_path = "C:\\compute"  # Windows path on VM (HCL string)
@@ -64,5 +64,5 @@ inputs = {
   
   # Secrets (Key Vault secret names)
   database_connection_string_secret_name = "DATABASE-URL"
-  rhino_api_key_secret_name              = "COMPUTE-API-KEY"
+  rhino_api_key_secret_name              = "RHINO-COMPUTE-KEY"  # Use the actual Cloud Zoo token
 }
