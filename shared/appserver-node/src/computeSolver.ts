@@ -66,15 +66,14 @@ export async function computeSolve(
     logger.debug({ event: 'compute.step3.build_request', cid: correlationId });
     const ghPath = buildDefinitionPath(definition, version);
     const request: GrasshopperRequest = {
-      algo: ghPath,
-      pointer: true, // File is on the Compute VM
+      pointer: ghPath,
       values: ghInputs
     };
 
     logger.debug({
       event: 'compute.grasshopper.request',
       cid: correlationId,
-      algo: ghPath,
+      pointer: ghPath,
       timeout_ms,
       input_count: ghInputs.length,
       input_params: ghInputs.map(v => ({

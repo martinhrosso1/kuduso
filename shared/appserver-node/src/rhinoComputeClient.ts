@@ -20,8 +20,8 @@ export interface GrasshopperValue {
 }
 
 export interface GrasshopperRequest {
-  algo: string;
-  pointer: boolean;
+  algo?: string | null;
+  pointer?: string | null;
   values: GrasshopperValue[];
 }
 
@@ -57,6 +57,7 @@ export async function callGrasshopper(
     cid: correlationId,
     url,
     algo: request.algo,
+    pointer: request.pointer,
     input_params: request.values.map(v => v.ParamName)
   });
 

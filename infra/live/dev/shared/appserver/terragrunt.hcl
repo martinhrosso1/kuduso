@@ -37,7 +37,7 @@ inputs = {
   container_registry_server = dependency.core.outputs.acr_server
   
   # Image
-  app_image = "appserver-node:contract-agnostic" # Full refactor: contract-agnostic + enhanced logging
+  app_image = "appserver-node:contract-agnostic-v2" # Full refactor: contract-agnostic + enhanced logging (v2)
   
   # Key Vault
   key_vault_id  = dependency.core.outputs.key_vault_id
